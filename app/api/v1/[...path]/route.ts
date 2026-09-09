@@ -1,8 +1,9 @@
-import { env } from 'cloudflare:workers';
+import postgres from 'postgres';
 import { products } from '@/lib/catalog';
 import { BusinessError, validAddress, priceCart } from '@/lib/commerce';
 const schema = [
   `CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, profile TEXT NOT NULL, expires INTEGER NOT NULL)`,
+  `ALTER TABLE sessions ALTER COLUMN expires TYPE BIGINT`,
   `CREATE TABLE IF NOT EXISTS records (id TEXT PRIMARY KEY, owner TEXT NOT NULL, kind TEXT NOT NULL, payload TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS records_owner_kind ON records(owner,kind)`,
   `CREATE TABLE IF NOT EXISTS inventory (owner TEXT NOT NULL,id TEXT NOT NULL,stock INTEGER NOT NULL CHECK(stock>=0),reserved INTEGER NOT NULL DEFAULT 0 CHECK(reserved>=0 AND reserved<=stock),PRIMARY KEY(owner,id))`,
@@ -10,8 +11,60 @@ const schema = [
   `CREATE TABLE IF NOT EXISTS idempotency (owner TEXT NOT NULL,key TEXT NOT NULL,fingerprint TEXT NOT NULL,recordId TEXT NOT NULL,PRIMARY KEY(owner,key))`,
   `CREATE TABLE IF NOT EXISTS guards (id TEXT PRIMARY KEY,ok INTEGER NOT NULL CHECK(ok=1))`,
 ];
-let initialized: Promise<any> | undefined;
-const db = () => env.DB;
+type Row = Record<string, any>;
+type QueryResult<T extends Row = Row> = { results: T[] };
+const connection = process.env.DATABASE_URL;
+if (!connection) throw new Error('DATABASE_URL is required');
+const sql = postgres(connection, { ssl: 'require', max: 5, prepare: false });
+const normalize = <T extends Row>(row: T): T => {
+  const value = row as Row;
+  if ('countused' in value) value.countUsed = value.countused;
+  if ('countreserved' in value) value.countReserved = value.countreserved;
+  if ('minsubtotal' in value) value.minSubtotal = value.minsubtotal;
+  return row;
+};
+class Statement {
+  values: any[] = [];
+  constructor(public query: string) {}
+  bind(...values: any[]) {
+    this.values = values;
+    return this;
+  }
+  private pgQuery() {
+    let i = 0;
+    return this.query.replace(/\?/g, () => `$${++i}`);
+  }
+  async execute(client: any = sql) {
+    return client.unsafe(this.pgQuery(), this.values);
+  }
+  async run() {
+    const rows = await this.execute();
+    return { success: true, results: rows };
+  }
+  async first<T extends Row>() {
+    const rows = await this.execute();
+    return rows[0] ? normalize(rows[0] as T) : null;
+  }
+  async all<T extends Row>(): Promise<QueryResult<T>> {
+    const rows = await this.execute();
+    return { results: rows.map((row: T) => normalize(row)) };
+  }
+}
+const database = {
+  prepare(query: string) {
+    return new Statement(query);
+  },
+  async batch(statements: Statement[]) {
+    return sql.begin(async (transaction) => {
+      const results = [];
+      for (const statement of statements)
+        results.push(await statement.execute(transaction));
+      return results;
+    });
+  },
+};
+const db = () => database;
+let initialized: Promise<unknown> | undefined;
 async function init() {
   initialized ||= db()
     .batch(schema.map((sql) => db().prepare(sql)))
@@ -34,7 +87,7 @@ const update = (owner: string, value: any) =>
 async function records(owner: string, kind: string) {
   const r = await db()
     .prepare(
-      'SELECT payload FROM records WHERE owner=? AND kind=? ORDER BY rowid DESC LIMIT 200',
+      "SELECT payload FROM records WHERE owner=? AND kind=? ORDER BY payload::jsonb->>'createdAt' DESC NULLS LAST LIMIT 200",
     )
     .bind(owner, kind)
     .all<{ payload: string }>();
@@ -92,13 +145,13 @@ async function seed(owner: string) {
     ...products.map((p) =>
       db()
         .prepare(
-          'INSERT OR IGNORE INTO inventory(owner,id,stock) VALUES(?,?,?)',
+          'INSERT INTO inventory(owner,id,stock) VALUES(?,?,?) ON CONFLICT DO NOTHING',
         )
         .bind(owner, p.id, p.stock),
     ),
     db()
       .prepare(
-        "INSERT OR IGNORE INTO campaigns(owner,code,name,status,percent,cap,budget,quota) VALUES(?,'KLIK5','Kebutuhan Fiber Lebih Hemat','active',5,300000,5000000,100)",
+        "INSERT INTO campaigns(owner,code,name,status,percent,cap,budget,quota) VALUES(?,'KLIK5','Kebutuhan Fiber Lebih Hemat','active',5,300000,5000000,100) ON CONFLICT DO NOTHING",
       )
       .bind(owner),
   ]);
@@ -109,7 +162,7 @@ async function release(owner: string, o: any, status: string) {
   const next = { ...o, status };
   const statements = [
     ...guard(
-      "SELECT json_extract(payload,'$.status')='awaiting_payment' FROM records WHERE id=? AND owner=?",
+      "SELECT payload::jsonb->>'status'='awaiting_payment' FROM records WHERE id=? AND owner=?",
       [o.id, owner],
     ),
     ...o.items.map((p: any) =>
@@ -397,7 +450,7 @@ async function handle(req: Request) {
       };
       const stmts = [
         ...guard(
-          "SELECT json_extract(payload,'$.status')='awaiting_payment' FROM records WHERE owner=? AND id=?",
+          "SELECT payload::jsonb->>'status'='awaiting_payment' FROM records WHERE owner=? AND id=?",
           [owner, o.id],
         ),
         update(owner, paid),
@@ -479,7 +532,7 @@ async function handle(req: Request) {
     const next = { ...q, status: 'accepted' };
     await db().batch([
       ...guard(
-        "SELECT json_extract(payload,'$.status')='offered' AND json_extract(payload,'$.version')=? FROM records WHERE id=? AND owner=?",
+        "SELECT payload::jsonb->>'status'='offered' AND (payload::jsonb->>'version')::int=? FROM records WHERE id=? AND owner=?",
         [body.version, q.id, owner],
       ),
       update(owner, next),
@@ -592,7 +645,7 @@ async function handle(req: Request) {
     };
     const stmts = [
       ...guard(
-        "SELECT json_extract(payload,'$.status')=? FROM records WHERE id=? AND owner=?",
+        "SELECT payload::jsonb->>'status'=? FROM records WHERE id=? AND owner=?",
         [o.status, o.id, owner],
       ),
       update(owner, next),
@@ -635,7 +688,7 @@ async function handle(req: Request) {
       };
       await db().batch([
         ...guard(
-          "SELECT json_extract(payload,'$.version')=? FROM records WHERE owner=? AND id=?",
+          "SELECT (payload::jsonb->>'version')::int=? FROM records WHERE owner=? AND id=?",
           [q.version, owner, q.id],
         ),
         update(owner, next),
@@ -684,7 +737,7 @@ async function handle(req: Request) {
       };
       await db().batch([
         ...guard(
-          "SELECT json_extract(payload,'$.status')='accepted' FROM records WHERE id=? AND owner=?",
+          "SELECT payload::jsonb->>'status'='accepted' FROM records WHERE id=? AND owner=?",
           [q.id, owner],
         ),
         ...guard(
@@ -731,7 +784,7 @@ async function handle(req: Request) {
     };
     await db().batch([
       ...guard(
-        "SELECT json_extract(payload,'$.refunded')=? FROM records WHERE id=? AND owner=?",
+        "SELECT COALESCE((payload::jsonb->>'refunded')::int,0)=? FROM records WHERE id=? AND owner=?",
         [o.refunded || 0, o.id, owner],
       ),
       update(owner, { ...o, refunded: (o.refunded || 0) + amount }),
@@ -805,6 +858,7 @@ async function route(req: Request) {
   try {
     return await handle(req);
   } catch (e) {
+    console.error('KLIKFIBER API error', e);
     const known = e instanceof BusinessError;
     return Response.json(
       {

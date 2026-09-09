@@ -1,2 +1,9 @@
 import Store from '@/components/store';
-export default function Page(){return <Store/>}
+import { Suspense } from 'react';
+export default function Page() {
+  return (
+    <Suspense>
+      <Store />
+    </Suspense>
+  );
+}

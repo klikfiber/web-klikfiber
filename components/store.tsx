@@ -123,6 +123,17 @@ export function ProductImage({
   p: Product;
   large?: boolean;
 }) {
+  if (p.imageSrc) {
+    return (
+      <div
+        className={'product-image ' + (large ? 'large' : '')}
+        role="img"
+        aria-label={p.name}
+      >
+        <img className="direct-product-image" src={p.imageSrc} alt={p.name} />
+      </div>
+    );
+  }
   const boxes = [
     [336, 245, 245, 158],
     [642, 240, 245, 163],
@@ -764,6 +775,16 @@ function Detail({ id }: { id: string }) {
           <p className="small muted">
             Harga dan spesifikasi contoh. Belum untuk transaksi nyata.
           </p>
+          {p.sourceUrl && (
+            <a
+              className="source-link"
+              href={p.sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {p.sourceLabel} <ArrowUpRight size={14} />
+            </a>
+          )}
         </div>
       </div>
       <Benefits />

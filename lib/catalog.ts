@@ -16,6 +16,9 @@ export type Product = {
   price: number;
   stock: number;
   image: number;
+  imageSrc?: string;
+  sourceUrl?: string;
+  sourceLabel?: string;
   description: string;
   unit?: string;
   quote?: boolean;
@@ -23,67 +26,83 @@ export type Product = {
 };
 export const products: Product[] = [
   {
-    id: 'fusion-splicer-kf-fs-88',
-    name: 'Fusion Splicer Core Alignment',
-    model: 'KF-FS-88',
+    id: 'ucl-swift-k33',
+    name: 'SWIFT K33 Fusion Splicer',
+    model: 'UCL SWIFT K33',
     category: categories[1],
     price: 28500000,
     stock: 8,
     image: 0,
+    imageSrc: '/images/ucl-k33-studio.png',
+    sourceUrl: 'https://uclswift.com/sub/prd-detail/40',
+    sourceLabel: 'Spesifikasi produsen UCL Swift',
     description:
       'Peralatan penyambung serat optik untuk kebutuhan instalasi backbone, FTTH, dan jaringan enterprise.',
     specs: {
-      'Metode alignment': 'Core alignment',
-      'Waktu splicing': '7 detik',
-      Layar: 'LCD 5 inci',
-      'Garansi contoh': '12 bulan',
+      'Metode alignment': 'IPAAS Core Alignment',
+      'Waktu splicing tipikal': '7 detik (Quick mode)',
+      Layar: 'Touchscreen elektrostatis 5,0 inci',
+      Elektroda: 'Hingga 18.000 kali',
+      Baterai: 'Tipikal 270 siklus (4.700 mAh)',
     },
   },
   {
-    id: 'otdr-1310-1550',
-    name: 'OTDR 1310/1550nm',
-    model: 'KF-OTDR-3300',
-    category: categories[2],
+    id: 'ucl-swift-kf4',
+    name: 'SWIFT KF4 Fusion Splicer',
+    model: 'UCL SWIFT KF4',
+    category: categories[1],
     price: 45000000,
     stock: 6,
     image: 1,
+    imageSrc: '/images/ucl-kf4.png',
+    sourceUrl: 'https://uclswift.com/sub/prd-detail/42',
+    sourceLabel: 'Spesifikasi produsen UCL Swift',
     description:
-      'Pengujian dan pemantauan jalur fiber optik untuk kebutuhan instalasi dan pemeliharaan.',
+      'Fusion splicer active cladding alignment yang kompatibel dengan Fusion Splice-On Connector.',
     specs: {
-      'Panjang gelombang': '1310 / 1550 nm',
-      Penggunaan: 'Pengujian jalur fiber',
-      'Garansi contoh': '12 bulan',
+      'Metode alignment': 'Active Cladding Alignment',
+      'Waktu splicing tipikal': '7 detik',
+      Elektroda: 'Hingga 38.000 kali',
+      Baterai: 'Tipikal 200 siklus (3.400 mAh)',
     },
   },
   {
-    id: 'optical-power-meter',
-    name: 'Optical Power Meter',
-    model: 'KF-OPM-100',
-    category: categories[2],
+    id: 'ucl-swift-k11',
+    name: 'SWIFT K11 Fusion Splicer',
+    model: 'UCL SWIFT K11',
+    category: categories[1],
     price: 2850000,
     stock: 12,
     image: 2,
+    imageSrc: '/images/ucl-k11.png',
+    sourceUrl: 'https://uclswift.com/sub/prd-detail/39',
+    sourceLabel: 'Spesifikasi produsen UCL Swift',
     description:
-      'Alat ukur daya optik portabel untuk pekerjaan teknisi di lapangan.',
+      'Fusion splicer core alignment dengan layar sentuh untuk pekerjaan instalasi profesional.',
     specs: {
-      Tipe: 'Optical power meter',
-      Penggunaan: 'Pengukuran daya optik',
-      'Garansi contoh': '12 bulan',
+      'Metode alignment': 'IPAAS Core Alignment',
+      'Waktu splicing tipikal': '6 detik (Quick mode)',
+      Layar: 'Touchscreen elektrostatis 5,0 inci',
+      Baterai: 'Tipikal 270 siklus (4.700 mAh)',
     },
   },
   {
-    id: 'fiber-cleaver',
-    name: 'Fiber Cleaver High Precision',
-    model: 'KF-FC-16',
+    id: 'ucl-swift-cs-01bt',
+    name: 'SWIFT Automatic Cleaver',
+    model: 'CS-01BT',
     category: categories[7],
     price: 3250000,
     stock: 8,
     image: 3,
-    description: 'Pemotong serat optik untuk persiapan proses penyambungan.',
+    imageSrc: '/images/ucl-cleaver.png',
+    sourceUrl: 'https://uclswift.com/sub/prd-detail/37',
+    sourceLabel: 'Spesifikasi produsen UCL Swift',
+    description:
+      'Cleaver otomatis dengan penggantian kanal, pemotongan, dan pengumpulan serpihan fiber.',
     specs: {
-      Tipe: 'Fiber cleaver',
-      Penggunaan: 'Persiapan penyambungan',
-      'Garansi contoh': '12 bulan',
+      Sistem: 'Oil damper',
+      Fungsi: 'Pemotongan dan pengumpulan serpihan otomatis',
+      Kompatibilitas: 'K33, KF4, KR12',
     },
   },
   {
@@ -130,18 +149,20 @@ export const products: Product[] = [
   },
   {
     id: 'patch-cord-sc-upc',
-    name: 'Patch Cord SC/UPC–SC/UPC',
-    model: 'KF-PC-SC-SC-3M',
+    name: 'Patch Cord Fiber Optik',
+    model: 'Fabeal Catalog Example',
     category: categories[3],
     price: 45000,
     stock: 42,
     image: 7,
+    imageSrc: '/images/patch-cord-studio.png',
+    sourceUrl: 'https://fabeal.co.id/',
+    sourceLabel: 'Contoh produk dari katalog Fabeal',
     description:
-      'Patch cord single mode untuk menghubungkan perangkat dan distribusi fiber optik.',
+      'Patch cord fiber optik dari contoh katalog FTTH Fabeal. Jenis polish, fiber, dan dimensi perlu dikonfirmasi.',
     specs: {
-      Konektor: 'SC/UPC–SC/UPC',
-      'Panjang contoh': '3 meter',
-      'Tipe serat': 'Single mode',
+      Kategori: 'FTTH Products',
+      Catatan: 'Spesifikasi konektor dan panjang belum diverifikasi',
     },
   },
   {

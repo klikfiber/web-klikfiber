@@ -550,6 +550,24 @@ p {
 .product-image.large {
   height: auto;
 }
+.direct-product-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+}
+.product-image.large .direct-product-image {
+  min-height: 315px;
+  max-height: 430px;
+}
+.source-link {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #0086a6;
+  font-size: 12px;
+  margin-top: 8px;
+}
 .stock-tag {
   position: absolute;
   top: 12px;

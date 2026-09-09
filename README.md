@@ -20,7 +20,11 @@ npm run build
 - Beranda, katalog, pencarian, filter, detail produk, wishlist, dan keranjang responsif.
 - Checkout tiga tahap dengan validasi server, promo, reservasi stok, idempotensi, pembayaran simulasi, invoice, dan pelacakan pesanan.
 - Akun pelanggan, alamat, RFQ/penawaran proyek, retur/garansi, portal staf, campaign, approval, stok, finance, dan audit.
-- Penyimpanan Cloudflare D1 dan autentikasi sesi untuk lingkungan uji.
+- Penyimpanan PostgreSQL Supabase dan autentikasi sesi untuk lingkungan uji.
+
+## Deployment
+
+Deployment produksi menggunakan Vercel dengan environment variable rahasia `DATABASE_URL` yang mengarah ke Supabase. Jangan commit `.env.local` atau kredensial database.
 
 ## Status lingkungan
 
