@@ -352,7 +352,7 @@ export function Benefits() {
 }
 function Home() {
  const [slide,setSlide]=useState(0);const [paused,setPaused]=useState(false);
- const slides=[{title:'Klik kebutuhan fiber, beres.',text:'Perangkat presisi untuk koneksi tanpa batas.',label:'Jelajahi Produk',url:'/produk',tag:'SOLUSI KONEKTIVITAS ANDA'}, {title:'Punya kode referral?',text:'Masuk ke akun Anda untuk melihat informasi referral dan manfaat yang tersedia.',label:'Lihat Referral',url:'/akun/referral',tag:'KONEKSI YANG LEBIH BERARTI'}, {title:'Harga terbaik untuk proyek Anda.',text:'Konsultasikan volume pembelian untuk mendapatkan penawaran harga khusus.',label:'Minta Penawaran',url:'/penawaran',tag:'PENGADAAN BISNIS & PROYEK'}];
+ const slides=[{title:'Fiber siap kerja.',text:'Perangkat pilihan untuk instalasi yang presisi.',label:'Belanja Sekarang',url:'/produk',tag:'KLIKFIBER.ID'}, {title:'Bagikan. Dapatkan reward.',text:'Gunakan kode referral dari sales KLIKFIBER.',label:'Lihat Program',url:'/sales',tag:'PROGRAM REFERRAL'}, {title:'Kebutuhan proyek?',text:'Dapatkan harga sesuai volume dan kebutuhan.',label:'Minta Penawaran',url:'/penawaran',tag:'SOLUSI B2B'}];
  useEffect(()=>{if(paused || window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;const timer=setInterval(()=>setSlide(i=>(i+1)%slides.length),6000);return()=>clearInterval(timer);},[paused]);
  const active=slides[slide];
  return (
@@ -683,9 +683,6 @@ function Detail({ id }: { id: string }) {
               <Search size={18} /> Perbesar foto
             </span>
           </button>
-          <p className="small muted">
-            Gambar ilustrasi dari mockup · {p.model}
-          </p>
         </div>
         <div className="detail-info">
           <span className="kicker">{p.category}</span>
@@ -742,9 +739,6 @@ function Detail({ id }: { id: string }) {
             <FileText size={18} /> Minta Penawaran Proyek{' '}
             <ChevronRight size={18} />
           </Link>
-          <p className="small muted">
-            Harga dan spesifikasi contoh. Belum untuk transaksi nyata.
-          </p>
           {p.sourceUrl && (
             <a
               className="source-link"
@@ -967,7 +961,7 @@ export default function Store() {
               <Menu />
             </button>
             <Logo />
-            <form className="search header-search" action="/produk">
+            {(path === '/' || path.startsWith('/produk')) && <form className="search header-search" action="/produk">
               <Search size={19} />
               <input
                 name="q"
@@ -979,7 +973,7 @@ export default function Store() {
               <button aria-label="Cari">
                 <ArrowRight size={18} />
               </button>
-            </form>
+            </form>}
             <Link className="header-action cart-link" href="/keranjang">
               <span className="cart-icon">
                 <ShoppingCart size={25} />
@@ -1077,16 +1071,7 @@ export default function Store() {
                 ))}
               </div>
             ))}
-            <div>
-              <h3>Mari bangun koneksi.</h3>
-              <a className="footer-contact" href="mailto:klikfiber@gmail.com">
-                klikfiber@gmail.com <ArrowUpRight size={16} />
-              </a>
-              <p>
-                Jalan Mayor Madmuin Hasibuan. 4B RT.003/024, Margahayu, Kec.
-                Bekasi Tim., Kota Bks, Jawa Barat 17113
-              </p>
-            </div>
+            <div><h3>Perlu bantuan?</h3><p>Tim kami siap membantu kebutuhan produk dan proyek Anda.</p><Link className="footer-contact" href="/dukungan">Hubungi Kami <ArrowUpRight size={16}/></Link></div>
           </div>
           <div className="container footer-bottom">
             <span>© 2026 KLIKFIBER. Semua hak dilindungi.</span>
@@ -1110,7 +1095,7 @@ export default function Store() {
           ))}
         </nav>
         <Sheet open={menu} onOpenChange={setMenu}>
-          <SheetContent side="left">
+          <SheetContent side="right" className="quick-menu">
             <SheetTitle>Jelajahi KLIKFIBER</SheetTitle>
             <p className="menu-intro">Belanja, konsultasi, dan bantuan.</p>
             <nav className="sheet-nav">

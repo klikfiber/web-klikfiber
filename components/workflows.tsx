@@ -66,6 +66,7 @@ import {
   notify,
 } from './store';
 import { products, rupiah, shipping } from '@/lib/catalog';
+import CustomerAuth from './customer-auth';
 export const office =
   'Jalan Mayor Madmuin Hasibuan. 4B RT.003/024, Margahayu, Kec. Bekasi Tim., Kota Bks, Jawa Barat 17113';
 const date = (d: string) =>
@@ -116,15 +117,12 @@ function Loading() {
   );
 }
 function LoginGate() {
-  const s = useStore();
   return (
-    <div className="panel empty">
-      <UserRound size={45} />
-      <h2>Satu akun untuk semua kebutuhan</h2>
-      <p>Lihat pesanan, simpan alamat, dan kelola penawaran proyek Anda.</p>
-      <Btn onClick={s.login}>
-        Masuk / Daftar <ArrowRight size={17} />
-      </Btn>
+    <div className="account-signin">
+      <span className="kicker">AKUN KLIKFIBER.ID</span>
+      <h1>Selamat datang di KLIKFIBER</h1>
+      <p>Masuk atau daftar untuk melanjutkan.</p>
+      <CustomerAuth done={() => location.reload()} />
     </div>
   );
 }
@@ -215,7 +213,7 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
   useEffect(() => {
     setQuote(null);
     key.current = '';
-  }, [s.cart, ship, applied]);
+  }, [s.cart, applied]);
   const subtotal = s.cart.reduce(
     (n, item) => n + products.find((p) => p.id === item.id)!.price * item.qty,
     0,
@@ -231,6 +229,7 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
         code: promo,
       });
       setQuote(q);
+      if (q.selectedShipping?.id) setShip(q.selectedShipping.id);
       return q;
     } catch (e: any) {
       setError(e.message);
@@ -240,7 +239,6 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
     }
   }
   if (paymentId) return <main className="container page"><div className="panel empty"><LockKeyhole size={40}/><h1>Pembayaran online segera tersedia</h1><p>Hubungi tim KLIKFIBER untuk konfirmasi pesanan dan metode pembayaran.</p><Btn href="/penawaran">Hubungi tim</Btn></div></main>;
-  if (path === '/checkout') return <main className="container page">{!s.profile?<LoginGate/>:<div className="panel empty"><Package size={40}/><h1>Lanjutkan dengan penawaran</h1><p>Tim kami akan membantu konfirmasi harga, stok, dan pengiriman sebelum pembayaran.</p><Btn href="/penawaran">Minta penawaran</Btn></div>}</main>;
   if (!s.ready)
     return (
       <main className="container page">
@@ -357,15 +355,19 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
                 <Truck /> Metode Pengiriman
               </h2>
               <p className="small muted">
-                Estimasi pengiriman. Ketersediaan layanan dikonfirmasi oleh
-                provider.
+                Tarif dan estimasi ditampilkan langsung dari Biteship setelah alamat diperiksa.
               </p>
               <RadioGroup
                 value={ship}
-                onValueChange={(v) => setShip(String(v))}
+                onValueChange={(v) => {
+                  const id = String(v);
+                  setShip(id);
+                  const option = quote?.shippingOptions?.find((x:any)=>x.id===id);
+                  if (option) setQuote((q:any)=>({...q, selectedShipping:option, shippingCost:option.cost, total:q.subtotal-q.discount+option.cost}));
+                }}
                 className="shipping-options"
               >
-                {shipping.map((option) => (
+                {(quote?.shippingOptions || []).map((option:any) => (
                   <label
                     key={option.id}
                     className={
@@ -388,7 +390,7 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
             <Gift />
             <div>
               <h3>Punya kode promo?</h3>
-              <p>Coba KLIK5: diskon 5%, maks. Rp300.000.</p>
+              <p>Masukkan kode promo yang Anda terima.</p>
             </div>
             <input
               aria-label="Kode promo"
@@ -423,11 +425,10 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
               <dd>{rupiah(quote?.subtotal ?? subtotal)}</dd>
             </div>
             <div>
-              <dt>Pengiriman ({shipping.find((x) => x.id === ship)!.name})</dt>
+              <dt>Pengiriman {quote?.selectedShipping ? `(${quote.selectedShipping.name})` : ''}</dt>
               <dd>
                 {rupiah(
-                  quote?.shippingCost ??
-                    shipping.find((x) => x.id === ship)!.cost!,
+                  quote?.shippingCost ?? 0,
                 )}
               </dd>
             </div>
@@ -444,7 +445,7 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
               <dd>
                 {rupiah(
                   quote?.total ??
-                    subtotal + shipping.find((x) => x.id === ship)!.cost!,
+                    subtotal,
                 )}
               </dd>
             </div>
@@ -454,7 +455,7 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
             <Checkbox checked={accepted} onCheckedChange={setAccepted} />
             <span>
               Saya menyetujui <Link href="/syarat">Syarat & Ketentuan</Link> dan
-              memahami transaksi ini layanan online.
+              menyetujui Kebijakan Privasi.
             </span>
           </label>
           <Btn
@@ -470,7 +471,7 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
                 return;
               }
               if (!accepted) {
-                setError('Setujui syarat layanan online terlebih dahulu.');
+                setError('Setujui syarat dan kebijakan privasi terlebih dahulu.');
                 return;
               }
               if (!quote) {
@@ -509,7 +510,7 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
           <div className="secure-box">
             <LockKeyhole />
             <strong>Belanja dengan tenang</strong>
-            <p>Pembayaran nyata akan diproses melalui halaman aman Xendit.</p>
+            <p>Metode pembayaran ditampilkan setelah layanan pembayaran diaktifkan.</p>
           </div>
           <div className="summary-benefits">
             <span>

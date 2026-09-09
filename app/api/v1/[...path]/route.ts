@@ -213,7 +213,8 @@ async function handle(req: Request) {
   if (rpath === 'auth/demo' || rpath === 'auth/demo-role' || path.includes('simulate-payment')) throw new BusinessError('Layanan tidak tersedia.', 410);
   const auth = await authServer();
   const { data: { user } } = await auth.auth.getUser();
-  const session = user ? { id: user.id, profile: JSON.stringify({id:user.id,name:user.user_metadata?.full_name || user.email?.split('@')[0] || 'Pelanggan',email:user.email,staffRole:user.app_metadata?.staffRole}) } : null;
+  const staffRole = user?.email?.toLowerCase() === 'klikfiber@gmail.com' ? 'admin' : user?.app_metadata?.staffRole;
+  const session = user ? { id: user.id, profile: JSON.stringify({id:user.id,name:user.user_metadata?.full_name || user.email?.split('@')[0] || 'Pelanggan',email:user.email,staffRole}) } : null;
   if (path[0] === 'products')
     return respond(
       path[1] ? products.find((p) => p.id === path[1]) || null : products,
@@ -254,7 +255,7 @@ async function handle(req: Request) {
     const rows = await db().prepare("SELECT payload FROM records WHERE kind='rfq' AND payload::jsonb->>'referralCode'=? ORDER BY payload::jsonb->>'createdAt' DESC LIMIT 100").bind(sales.code).all<{payload:string}>();
     return respond(rows.results.map((row) => { const q = JSON.parse(row.payload); return { number:q.number, company:q.company, status:q.status, createdAt:q.createdAt }; }));
   }
-  if ((r === 'orders' && isPost) || r === 'checkout/quote') throw new BusinessError('Pembelian online segera tersedia. Hubungi tim untuk penawaran dan konfirmasi harga.', 503);
+  if (r === 'orders' && isPost) throw new BusinessError('Pembayaran online belum diaktifkan. Hubungi tim KLIKFIBER untuk menyelesaikan pesanan.', 503);
   if (r === 'me') {
     if (isPost) {
       profile.name = str(body.name, 2, 100);
@@ -304,6 +305,20 @@ async function handle(req: Request) {
     if (code && !campaign)
       throw new BusinessError('Kode promo tidak ditemukan.');
     const totals = priceCart(body.items, body.shipping, campaign);
+    const apiKey = process.env.BITESHIP_API_KEY;
+    if (!apiKey) throw new BusinessError('Koneksi tarif Biteship belum diaktifkan.', 503);
+    const rateResponse = await fetch('https://api.biteship.com/v1/rates/couriers', {
+      method: 'POST',
+      headers: { Authorization: `Basic ${Buffer.from(apiKey + ':').toString('base64')}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ origin_postal_code: 17113, destination_postal_code: Number(address.postal), couriers: process.env.BITESHIP_COURIERS || 'jne,sicepat,anteraja,jnt', items: totals.items.map((item: any) => { const product = products.find((p) => p.id === item.id)!; return { name: product.name, sku: product.model, value: product.price, quantity: item.qty, weight: product.weight || 1000, ...(product.dimensions || { length: 30, width: 25, height: 20 }) }; }) }),
+      signal: AbortSignal.timeout(12000),
+    });
+    const rateResult: any = await rateResponse.json();
+    if (!rateResponse.ok || !rateResult.success || !rateResult.pricing?.length) throw new BusinessError(rateResult.message || 'Tarif pengiriman tidak tersedia untuk tujuan ini.', 422);
+    const shippingOptions = rateResult.pricing.sort((a:any,b:any)=>a.price-b.price).map((x:any)=>({ id:`${x.courier_code}:${x.courier_service_code}`, name:`${x.courier_name} ${x.courier_service_name}`, cost:x.price, eta:x.duration }));
+    const selectedShipping = shippingOptions.find((x:any)=>x.id===body.shipping) || shippingOptions[0];
+    totals.shippingCost = selectedShipping.cost;
+    totals.total = totals.subtotal - totals.discount + selectedShipping.cost;
     for (const p of totals.items) {
       const stock = await db()
         .prepare(
@@ -319,6 +334,8 @@ async function handle(req: Request) {
       ...totals,
       address,
       code,
+      shippingOptions,
+      selectedShipping,
       createdAt: now(),
       expiresAt: new Date(Date.now() + 15 * 60000).toISOString(),
     };
