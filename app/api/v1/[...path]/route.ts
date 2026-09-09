@@ -1,3 +1,4 @@
+import { authServer } from '@/lib/auth/server';
 import postgres from 'postgres';
 import { products } from '@/lib/catalog';
 import { BusinessError, validAddress, priceCart } from '@/lib/commerce';
@@ -208,69 +209,56 @@ async function handle(req: Request) {
       throw new BusinessError('JSON tidak valid.', 400);
     }
   }
-  const raw = req.headers
-    .get('cookie')
-    ?.match(/(?:^|;\s*)kf_session=([a-f0-9-]{36})/)?.[1];
-  let session = raw
-    ? await db()
-        .prepare('SELECT * FROM sessions WHERE id=? AND expires>?')
-        .bind(raw, Date.now())
-        .first<any>()
-    : null;
-  if (path.join('/') === 'auth/demo' && isPost) {
-    if (session) return respond(JSON.parse(session.profile));
-    const sid = id();
-    const profile = { name: 'Budi', id: id(), demo: true };
-    await db()
-      .prepare('INSERT INTO sessions VALUES(?,?,?)')
-      .bind(sid, JSON.stringify(profile), Date.now() + 7 * 86400000)
-      .run();
-    await seed(sid);
-    return respond(profile, 200, {
-      'Set-Cookie': `kf_session=${sid}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800${url.protocol === 'https:' ? '; Secure' : ''}`,
-    });
-  }
+  const rpath = path.join('/');
+  if (rpath === 'auth/demo' || rpath === 'auth/demo-role' || path.includes('simulate-payment')) throw new BusinessError('Layanan tidak tersedia.', 410);
+  const auth = await authServer();
+  const { data: { user } } = await auth.auth.getUser();
+  const session = user ? { id: user.id, profile: JSON.stringify({id:user.id,name:user.user_metadata?.full_name || user.email?.split('@')[0] || 'Pelanggan',email:user.email,staffRole:user.app_metadata?.staffRole}) } : null;
   if (path[0] === 'products')
     return respond(
       path[1] ? products.find((p) => p.id === path[1]) || null : products,
     );
   if (!session)
-    throw new BusinessError('Silakan masuk ke akun uji terlebih dahulu.', 401);
+    throw new BusinessError('Silakan masuk atau daftar terlebih dahulu.', 401);
   const owner = session.id as string;
   const profile = JSON.parse(session.profile);
   const r = path.join('/');
-  if (r === 'auth/logout' && isPost) {
-    await db().prepare('DELETE FROM sessions WHERE id=?').bind(owner).run();
-    return respond({ ok: true }, 200, {
-      'Set-Cookie': 'kf_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0',
+  if (r === 'auth/logout' && isPost) { await auth.auth.signOut(); return respond({ok:true}); }
+  if (r === 'shipping/rates' && isPost) {
+    const apiKey = process.env.BITESHIP_API_KEY;
+    if (!apiKey) throw new BusinessError('Koneksi tarif pengiriman belum diaktifkan.', 503);
+    const destination = integer(body.destinationPostalCode, 10000, 99999);
+    if (!Array.isArray(body.items) || !body.items.length) throw new BusinessError('Keranjang masih kosong.');
+    const items = body.items.map((item: any) => {
+      const product = products.find((p) => p.id === item.id);
+      if (!product) throw new BusinessError('Produk tidak ditemukan.');
+      const dimensions = product.dimensions || { length: 30, width: 25, height: 20 };
+      return { name: product.name, description: product.description, sku: product.model, category: 'electronic', value: product.price, quantity: integer(item.qty, 1, 100), weight: product.weight || 1000, ...dimensions };
     });
+    const response = await fetch('https://api.biteship.com/v1/rates/couriers', { method: 'POST', headers: { Authorization: `Basic ${Buffer.from(apiKey + ':').toString('base64')}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ origin_postal_code: 17113, destination_postal_code: destination, couriers: process.env.BITESHIP_COURIERS || 'jne,sicepat,anteraja,jnt', items }), signal: AbortSignal.timeout(12000) });
+    const result: any = await response.json();
+    if (!response.ok || !result.success) throw new BusinessError(result.message || 'Tarif pengiriman belum tersedia.', 502);
+    return respond(result.pricing || []);
   }
-  if (r === 'auth/demo-role' && isPost) {
-    if (!profile.demo)
-      throw new BusinessError('Peran uji tidak tersedia.', 403);
-    if (!['operations', 'marketing', 'finance', 'owner'].includes(body.role))
-      throw new BusinessError('Peran tidak valid.');
-    profile.staffRole = body.role;
-    await db().batch([
-      db()
-        .prepare('UPDATE sessions SET profile=? WHERE id=?')
-        .bind(JSON.stringify(profile), owner),
-      audit(
-        owner,
-        body.role,
-        'demo.role',
-        'Perubahan peran dalam tenant uji sendiri',
-      ),
-    ]);
-    return respond(profile);
+  if (r === 'sales/profile') {
+    const current = (await records(owner, 'sales_profile'))[0] || null;
+    if (!isPost) return respond(current);
+    if (current) return respond(current);
+    const sales = { id: owner + '-sales', code: 'KFS' + owner.replace(/-/g, '').slice(0, 7).toUpperCase(), name: str(body.name, 2, 100), phone: str(body.phone, 9, 16), city: str(body.city, 2, 100), status: 'active', createdAt: now() };
+    await save(owner, 'sales_profile', sales).run();
+    return respond(sales, 201);
   }
+  if (r === 'sales/referrals') {
+    const sales = (await records(owner, 'sales_profile'))[0];
+    if (!sales) throw new BusinessError('Daftar sebagai sales terlebih dahulu.', 404);
+    const rows = await db().prepare("SELECT payload FROM records WHERE kind='rfq' AND payload::jsonb->>'referralCode'=? ORDER BY payload::jsonb->>'createdAt' DESC LIMIT 100").bind(sales.code).all<{payload:string}>();
+    return respond(rows.results.map((row) => { const q = JSON.parse(row.payload); return { number:q.number, company:q.company, status:q.status, createdAt:q.createdAt }; }));
+  }
+  if ((r === 'orders' && isPost) || r === 'checkout/quote') throw new BusinessError('Pembelian online segera tersedia. Hubungi tim untuk penawaran dan konfirmasi harga.', 503);
   if (r === 'me') {
     if (isPost) {
       profile.name = str(body.name, 2, 100);
-      await db()
-        .prepare('UPDATE sessions SET profile=? WHERE id=?')
-        .bind(JSON.stringify(profile), owner)
-        .run();
+      const {error} = await auth.auth.updateUser({data:{full_name:profile.name}}); if(error)throw new BusinessError('Profil belum dapat diperbarui.',400);
     }
     return respond(profile);
   }
@@ -485,7 +473,7 @@ async function handle(req: Request) {
             })[c]!,
         );
       return new Response(
-        `<!doctype html><html lang="id"><meta charset="utf-8"><title>Invoice ${esc(o.number)}</title><style>body{font:16px Arial;color:#0b1f3a;max-width:850px;margin:50px auto;padding:25px}h1{color:#0098b8}table{width:100%;border-collapse:collapse}td,th{padding:15px;text-align:left;border-bottom:1px solid #ddd}.note{background:#eef7fa;padding:15px}</style><h1>KLIKFIBER</h1><h2>Invoice Penjualan Uji</h2><p>${esc(o.number)} · ${esc(o.paidAt)}</p><p>${esc(o.address.name)}<br>${esc(o.address.street)}, ${esc(o.address.city)}</p><table><tr><th>Produk</th><th>Jumlah</th><th>Harga</th></tr>${o.items.map((p: any) => `<tr><td>${esc(p.name)}</td><td>${p.qty}</td><td>Rp ${(p.qty * p.price).toLocaleString('id-ID')}</td></tr>`).join('')}</table><p>Subtotal: Rp ${o.subtotal.toLocaleString('id-ID')}<br>Diskon: Rp ${o.discount.toLocaleString('id-ID')}<br>Ongkir: Rp ${o.shippingCost.toLocaleString('id-ID')}</p><h2>Total Rp ${o.total.toLocaleString('id-ID')}</h2><p class="note">SIMULASI — bukan bukti pembayaran nyata atau faktur pajak.</p><p>klikfiber@gmail.com</p></html>`,
+        `<!doctype html><html lang="id"><meta charset="utf-8"><title>Invoice ${esc(o.number)}</title><style>body{font:16px Arial;color:#0b1f3a;max-width:850px;margin:50px auto;padding:25px}h1{color:#0098b8}table{width:100%;border-collapse:collapse}td,th{padding:15px;text-align:left;border-bottom:1px solid #ddd}</style><h1>KLIKFIBER</h1><h2>Invoice Penjualan</h2><p>${esc(o.number)} · ${esc(o.paidAt)}</p><p>${esc(o.address.name)}<br>${esc(o.address.street)}, ${esc(o.address.city)}</p><table><tr><th>Produk</th><th>Jumlah</th><th>Harga</th></tr>${o.items.map((p: any) => `<tr><td>${esc(p.name)}</td><td>${p.qty}</td><td>Rp ${(p.qty * p.price).toLocaleString('id-ID')}</td></tr>`).join('')}</table><p>Subtotal: Rp ${o.subtotal.toLocaleString('id-ID')}<br>Diskon: Rp ${o.discount.toLocaleString('id-ID')}<br>Ongkir: Rp ${o.shippingCost.toLocaleString('id-ID')}</p><h2>Total Rp ${o.total.toLocaleString('id-ID')}</h2><p>klikfiber@gmail.com</p></html>`,
         {
           headers: {
             'Content-Type': 'text/html; charset=utf-8',
@@ -509,6 +497,7 @@ async function handle(req: Request) {
       phone: str(body.phone, 9, 16),
       city: str(body.city, 2, 100),
       requirements: str(body.requirements, 10, 3000),
+      referralCode: typeof body.referralCode === 'string' ? body.referralCode.trim().toUpperCase().slice(0, 20) : '',
       status: 'submitted',
       version: 0,
       createdAt: now(),

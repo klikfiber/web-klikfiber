@@ -123,17 +123,17 @@ function LoginGate() {
       <h2>Satu akun untuk semua kebutuhan</h2>
       <p>Lihat pesanan, simpan alamat, dan kelola penawaran proyek Anda.</p>
       <Btn onClick={s.login}>
-        Masuk ke Akun Uji <ArrowRight size={17} />
+        Masuk / Daftar <ArrowRight size={17} />
       </Btn>
     </div>
   );
 }
 const initialAddress = {
-  name: 'Budi Santoso',
-  phone: '081234567890',
+  name: '',
+  phone: '',
   city: 'Bekasi',
   postal: '17113',
-  street: 'Jalan Contoh No. 12, Margahayu',
+  street: '',
   company: '',
 };
 function AddressFields({
@@ -239,83 +239,8 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
       setBusy(false);
     }
   }
-  if (paymentId) {
-    if (!order)
-      return (
-        <main className="container page">
-          {error ? <ErrorBox message={error} /> : <Loading />}
-        </main>
-      );
-    const paid = ['confirmed', 'processing', 'shipped', 'completed'].includes(
-      order.status,
-    );
-    return (
-      <main className="container page payment-page">
-        <div className="payment-card panel">
-          <span className="kicker">PEMBAYARAN SIMULASI</span>
-          {paid ? (
-            <CircleCheck size={57} className="green" />
-          ) : (
-            <LockKeyhole size={49} />
-          )}
-          <h1>{paid ? 'Pembayaran berhasil' : 'Selesaikan pembayaran uji'}</h1>
-          <p>{order.number}</p>
-          <Status value={order.status} />
-          <div className="payment-total">{rupiah(order.total)}</div>
-          <p>
-            Tidak ada uang yang ditagih. Halaman ini mensimulasikan pembayaran
-            hosted; tidak meminta data kartu atau rekening Anda.
-          </p>
-          {error && <ErrorBox message={error} />}
-          <div className="stack">
-            {order.status === 'awaiting_payment' && (
-              <>
-                <Btn
-                  disabled={busy}
-                  onClick={async () => {
-                    setBusy(true);
-                    try {
-                      setOrder(
-                        await api(
-                          'orders/' + order.id + '/simulate-payment',
-                          {},
-                        ),
-                      );
-                      s.clearCart();
-                      notify('Pembayaran simulasi berhasil');
-                    } catch (e: any) {
-                      setError(e.message);
-                    } finally {
-                      setBusy(false);
-                    }
-                  }}
-                >
-                  {busy ? 'Memproses…' : 'Simulasikan Pembayaran Berhasil'}
-                  <Check size={18} />
-                </Btn>
-                <Btn
-                  outline
-                  onClick={async () => {
-                    try {
-                      setOrder(await api('orders/' + order.id + '/cancel', {}));
-                      notify('Pesanan dibatalkan');
-                    } catch (e: any) {
-                      setError(e.message);
-                    }
-                  }}
-                >
-                  Batalkan pesanan uji
-                </Btn>
-              </>
-            )}
-            <Btn href={'/akun/pesanan/' + order.id} outline>
-              Lihat Detail Pesanan <ArrowRight size={17} />
-            </Btn>
-          </div>
-        </div>
-      </main>
-    );
-  }
+  if (paymentId) return <main className="container page"><div className="panel empty"><LockKeyhole size={40}/><h1>Pembayaran online segera tersedia</h1><p>Hubungi tim KLIKFIBER untuk konfirmasi pesanan dan metode pembayaran.</p><Btn href="/penawaran">Hubungi tim</Btn></div></main>;
+  if (path === '/checkout') return <main className="container page">{!s.profile?<LoginGate/>:<div className="panel empty"><Package size={40}/><h1>Lanjutkan dengan penawaran</h1><p>Tim kami akan membantu konfirmasi harga, stok, dan pengiriman sebelum pembayaran.</p><Btn href="/penawaran">Minta penawaran</Btn></div>}</main>;
   if (!s.ready)
     return (
       <main className="container page">
@@ -416,7 +341,7 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
                     onChange={(v) => {
                       setAddress(v);
                       setQuote(null);
-                      setStep(1);
+                      router.push('/checkout');
                     }}
                   />
                   <Btn type="submit" outline disabled={busy}>
@@ -432,7 +357,7 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
                 <Truck /> Metode Pengiriman
               </h2>
               <p className="small muted">
-                Tarif uji. Ketersediaan layanan aktual dikonfirmasi oleh
+                Estimasi pengiriman. Ketersediaan layanan dikonfirmasi oleh
                 provider.
               </p>
               <RadioGroup
@@ -511,7 +436,7 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
               <dd className="green">− {rupiah(quote?.discount ?? 0)}</dd>
             </div>
             <div>
-              <dt>Pajak tambahan (simulasi)</dt>
+              <dt>Pajak tambahan (layanan online)</dt>
               <dd>Rp 0</dd>
             </div>
             <div className="total">
@@ -529,7 +454,7 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
             <Checkbox checked={accepted} onCheckedChange={setAccepted} />
             <span>
               Saya menyetujui <Link href="/syarat">Syarat & Ketentuan</Link> dan
-              memahami transaksi ini simulasi.
+              memahami transaksi ini layanan online.
             </span>
           </label>
           <Btn
@@ -545,7 +470,7 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
                 return;
               }
               if (!accepted) {
-                setError('Setujui syarat transaksi simulasi terlebih dahulu.');
+                setError('Setujui syarat layanan online terlebih dahulu.');
                 return;
               }
               if (!quote) {
@@ -578,7 +503,7 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
                 ? 'Lanjut ke Pengiriman'
                 : !quote
                   ? 'Periksa Alamat & Total'
-                  : 'Lanjut Bayar Uji'}
+                  : 'Lanjut Bayar'}
             <ArrowRight size={18} />
           </Btn>
           <div className="secure-box">
@@ -652,7 +577,7 @@ function OrderView({ order, reload }: { order: any; reload: () => void }) {
         <div className="tracking-box">
           <Truck />
           <span>
-            Nomor resi simulasi<strong>{order.tracking}</strong>
+            Nomor resi layanan online<strong>{order.tracking}</strong>
           </span>
           <button
             className="icon-btn"
@@ -732,7 +657,7 @@ function OrderView({ order, reload }: { order: any; reload: () => void }) {
           <DialogTitle>Permintaan purnajual</DialogTitle>
           <DialogDescription>
             Jelaskan masalah pada pesanan {order.number}. Permintaan disimpan
-            dalam mode uji.
+            untuk ditinjau tim KLIKFIBER.
           </DialogDescription>
           <form
             className="stack"
@@ -999,7 +924,7 @@ export function Account() {
                     />
                   </label>
                   <p className="small">
-                    Akun pelanggan uji · Data tersimpan di server dan terikat
+                    Akun pelanggan · Data tersimpan di server dan terikat
                     sesi browser.
                   </p>
                   <Btn type="submit">Simpan Profil</Btn>
@@ -1105,8 +1030,8 @@ export function QuoteForm() {
                 Nomor penawaran: <strong>{sent.number}</strong>
               </p>
               <p>
-                Ini adalah permintaan uji. Pantau status di akun Anda atau
-                proses melalui Portal Staf Uji.
+                Permintaan Anda sudah disimpan. Pantau status di akun Anda atau
+                proses melalui tim KLIKFIBER.
               </p>
               <Btn href="/akun/penawaran">Lihat Penawaran Saya</Btn>
             </div>
@@ -1170,6 +1095,10 @@ export function QuoteForm() {
                     placeholder="08xxxxxxxxxx"
                   />
                 </label>
+                <label>
+                  Kode referral <span>(opsional)</span>
+                  <input name="referralCode" maxLength={20} placeholder="Contoh: KFS1234567" defaultValue={params.get('ref') || ''} />
+                </label>
                 <label className="span-2">
                   Kota tujuan
                   <input
@@ -1201,7 +1130,7 @@ export function QuoteForm() {
               </p>
               {error && <ErrorBox message={error} />}
               <Btn type="submit" disabled={busy}>
-                {busy ? 'Menyimpan…' : 'Kirim Permintaan Uji'}
+                {busy ? 'Menyimpan…' : 'Kirim Permintaan'}
                 <ArrowRight size={17} />
               </Btn>
             </form>
@@ -1225,7 +1154,7 @@ export function QuoteForm() {
               dapat ditinjau dengan baik.
             </p>
             <div className="info-strip">
-              Mode uji: formulir disimpan, tanpa mengirim email kepada pihak
+              Formulir disimpan di akun Anda. Untuk tindak lanjut, hubungi pihak
               lain.
             </div>
           </div>
@@ -1234,6 +1163,29 @@ export function QuoteForm() {
     </main>
   );
 }
+export function SalesPortal() {
+  const s = useStore();
+  const [profile, setProfile] = useState<any>(null);
+  const [referrals, setReferrals] = useState<any[]>([]);
+  const [error, setError] = useState('');
+  const load = async () => {
+    try {
+      const current = await api('sales/profile');
+      setProfile(current);
+      if (current) setReferrals(await api('sales/referrals'));
+    } catch (e: any) { setError(e.message); }
+  };
+  useEffect(() => { if (s.profile) void load(); }, [s.profile]);
+  if (!s.profile) return <main className="container page"><LoginGate /></main>;
+  return <main className="container page sales-page">
+    <div className="page-heading"><span className="kicker">PROGRAM MITRA KLIKFIBER</span><h1>Portal Sales & Referral</h1><p>Daftar, bagikan kode Anda, dan pantau permintaan penawaran yang masuk.</p></div>
+    {error && <p className="error">{error}</p>}
+    {!profile ? <form className="panel stack" onSubmit={async(e)=>{e.preventDefault();setError('');try{setProfile(await api('sales/profile',Object.fromEntries(new FormData(e.currentTarget))));await load();}catch(x:any){setError(x.message)}}}>
+      <h2>Pendaftaran Sales</h2><div className="form-grid"><label>Nama lengkap<input name="name" required minLength={2} defaultValue={s.profile.name}/></label><label>Nomor WhatsApp<input name="phone" required inputMode="tel" placeholder="081234567890"/></label><label>Kota domisili<input name="city" required placeholder="Bekasi"/></label></div><Btn type="submit">Daftar dan Buat Kode</Btn>
+    </form> : <div className="sales-grid"><section className="panel"><span className="kicker">KODE REFERRAL ANDA</span><h2>{profile.code}</h2><p>Bagikan tautan ini kepada calon pelanggan.</p><button className="btn primary" onClick={()=>navigator.clipboard.writeText(`${location.origin}/penawaran?ref=${profile.code}`)}><Copy size={18}/> Salin tautan referral</button></section><section className="panel"><h2>Aktivitas Referral</h2><strong className="sales-count">{referrals.length}</strong><p>permintaan penawaran menggunakan kode Anda</p>{referrals.map((item)=><div className="admin-row" key={item.number}><div><strong>{item.number}</strong><small>{item.company}</small></div><Status value={item.status}/></div>)}</section></div>}
+  </main>;
+}
+
 export function Backoffice() {
   const s = useStore();
   const [data, setData] = useState<any>(null);
@@ -1260,7 +1212,7 @@ export function Backoffice() {
     try {
       await api(path, body);
       await load();
-      notify('Perubahan uji disimpan');
+      notify('Perubahan  disimpan');
       setEdit(null);
     } catch (e: any) {
       notify(e.message, 'error');
@@ -1272,40 +1224,7 @@ export function Backoffice() {
         <LoginGate />
       </main>
     );
-  if (!s.profile.staffRole)
-    return (
-      <main className="container page">
-        <div className="panel empty">
-          <LockKeyhole size={45} />
-          <h1>Portal Staf Uji</h1>
-          <p>
-            Aktifkan peran untuk mencoba pengelolaan data uji milik sesi Anda
-            sendiri.
-            <br />
-            Peran ini tidak memberi akses ke data pengunjung lain.
-          </p>
-          <div className="role-buttons">
-            {[
-              ['operations', 'Operasional'],
-              ['marketing', 'Marketing'],
-              ['finance', 'Finance'],
-              ['owner', 'Owner'],
-            ].map(([r, label]) => (
-              <Btn
-                key={r}
-                outline
-                onClick={async () => {
-                  await api('auth/demo-role', { role: r });
-                  await s.refresh();
-                }}
-              >
-                {label}
-              </Btn>
-            ))}
-          </div>
-        </div>
-      </main>
-    );
+  if (!s.profile.staffRole) return <main className="container page"><div className="panel empty"><LockKeyhole/><h1>Akses staf diperlukan</h1><p>Halaman ini hanya tersedia untuk tim KLIKFIBER yang berwenang.</p></div></main>;
   if (!data)
     return (
       <main className="container page">
@@ -1317,7 +1236,7 @@ export function Backoffice() {
     <main className="container page admin-page">
       <div className="admin-heading">
         <div className="page-heading">
-          <span className="kicker">PORTAL STAF · LINGKUNGAN UJI</span>
+          <span className="kicker">PORTAL STAF</span>
           <h1>Ruang kerja KLIKFIBER</h1>
           <p>
             Data sesi Anda · Asia/Jakarta · Diperbarui{' '}
@@ -1325,24 +1244,7 @@ export function Backoffice() {
           </p>
         </div>
         <div className="row">
-          <Select
-            value={role}
-            onValueChange={async (r) => {
-              await api('auth/demo-role', { role: r });
-              await s.refresh();
-            }}
-          >
-            <SelectTrigger aria-label="Peran uji" className="sort-select">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {['operations', 'marketing', 'finance', 'owner'].map((r) => (
-                <SelectItem key={r} value={r}>
-                  {r}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <span className="tiny-pill">{role}</span>
           <Btn outline onClick={load}>
             <RefreshCw size={16} />
           </Btn>
@@ -1421,7 +1323,7 @@ export function Backoffice() {
               sub="Status pembayaran dan pengiriman dipisahkan."
             />
             {!data.orders.length && (
-              <p>Belum ada pesanan uji. Buat pesanan dari storefront.</p>
+              <p>Belum ada pesanan . Buat pesanan dari storefront.</p>
             )}
             {data.orders.map((o: any) => (
               <div className="admin-row" key={o.id}>
@@ -1448,8 +1350,8 @@ export function Backoffice() {
                         {o.status === 'confirmed'
                           ? 'Proses'
                           : o.status === 'processing'
-                            ? 'Kirim Uji'
-                            : 'Tandai Diterima Uji'}
+                            ? 'Kirim'
+                            : 'Tandai Diterima'}
                       </Btn>
                     )}
                 </div>
@@ -1461,7 +1363,7 @@ export function Backoffice() {
           <div className="panel">
             <h2>Produk & Stok</h2>
             <p className="small muted">
-              Stok uji terpisah per sesi. Penyesuaian membutuhkan alasan.
+              Stok  terpisah per sesi. Penyesuaian membutuhkan alasan.
             </p>
             <Table>
               <TableHeader>
@@ -1606,7 +1508,7 @@ export function Backoffice() {
           <div className="panel">
             <h2>Finance & Rekonsiliasi</h2>
             <p>
-              Mode uji: dana masuk dan settlement bank nyata tidak tersedia.
+              Data pembayaran otomatis belum tersedia.
             </p>
             {!financial ? (
               <ErrorBox message="Peran finance atau owner diperlukan." />
@@ -1635,7 +1537,7 @@ export function Backoffice() {
                         disabled={(o.refunded || 0) >= o.total}
                         onClick={() => setEdit({ kind: 'refund', ...o })}
                       >
-                        Refund Uji
+                        Refund
                       </Btn>
                     </div>
                   ))}
@@ -1681,11 +1583,11 @@ export function Backoffice() {
             {edit?.kind === 'stock'
               ? 'Penyesuaian stok'
               : edit?.kind === 'refund'
-                ? 'Refund simulasi'
+                ? 'Refund layanan online'
                 : 'Penawaran proyek'}
           </DialogTitle>
           <DialogDescription>
-            Perubahan disimpan pada data uji sesi Anda dan dicatat dalam audit.
+            Perubahan disimpan pada layanan online sesi Anda dan dicatat dalam audit.
           </DialogDescription>
           {edit && (
             <form
@@ -1785,7 +1687,7 @@ export function Backoffice() {
                   required
                 />
               </label>
-              <Btn type="submit">Simpan Perubahan Uji</Btn>
+              <Btn type="submit">Simpan Perubahan</Btn>
             </form>
           )}
         </DialogContent>
@@ -1854,9 +1756,9 @@ export function Information({ page }: { page: string }) {
         : page === '/tentang'
           ? 'Koneksi lebih dekat, masa depan lebih luas.'
           : page === '/privasi'
-            ? 'Privasi pada lingkungan uji'
+            ? 'Kebijakan Privasi'
             : page === '/syarat'
-              ? 'Ketentuan lingkungan uji'
+              ? 'Syarat & Ketentuan'
               : 'Halaman tidak ditemukan';
   return (
     <main className="container page information">
@@ -1874,69 +1776,16 @@ export function Information({ page }: { page: string }) {
         <h1>{title}</h1>
         <p>
           {legal
-            ? 'Informasi sementara untuk penggunaan versi uji KLIKFIBER.'
+            ? 'Informasi sementara untuk penggunaan layanan online KLIKFIBER.'
             : promo
               ? 'Dapatkan manfaat lebih untuk perlengkapan proyek Anda.'
               : 'Perangkat, aksesori, dan pengadaan fiber optik untuk teknisi, ISP, kontraktor, dan perusahaan.'}
         </p>
       </div>
       {promo ? (
-        <div className="promo-card panel">
-          <Gift size={43} />
-          <span className="kicker">PROMO SIMULASI</span>
-          <h2>Hemat 5% untuk kebutuhan fiber Anda.</h2>
-          <p>
-            Maksimum diskon Rp300.000. Minimum belanja Rp100.000.
-            <br />
-            Satu kode per pesanan, sesuai ketersediaan budget campaign.
-          </p>
-          <div className="row">
-            <code>KLIK5</code>
-            <Btn
-              outline
-              onClick={() =>
-                navigator.clipboard
-                  .writeText('KLIK5')
-                  .then(() => notify('Kode promo disalin'))
-                  .catch(() =>
-                    notify('Salin kode KLIK5 secara manual', 'error'),
-                  )
-              }
-            >
-              <Copy size={16} />
-              Salin Kode
-            </Btn>
-            <Btn href="/produk">
-              Belanja Sekarang
-              <ArrowRight size={16} />
-            </Btn>
-          </div>
-        </div>
+        <div className="promo-card panel"><Gift size={43}/><span className="kicker">PENAWARAN KLIKFIBER</span><h2>Lebih banyak kebutuhan, lebih tepat penawarannya.</h2><p>Hubungi tim kami untuk harga volume dan informasi promo yang berlaku pada pesanan Anda.</p><Btn href="/penawaran">Konsultasikan kebutuhan</Btn></div>
       ) : legal ? (
-        <div className="panel prose">
-          <h2>
-            {page === '/privasi'
-              ? 'Data yang disimpan'
-              : 'Penggunaan versi uji'}
-          </h2>
-          <p>
-            Website ini adalah lingkungan pengujian. Produk, harga, stok,
-            ongkir, dan pembayaran merupakan data simulasi. Tidak ada transaksi
-            uang atau pengiriman barang nyata.
-          </p>
-          <p>
-            Data keranjang dan wishlist disimpan pada browser. Profil, alamat
-            uji, pesanan, dan penawaran disimpan di database dengan sesi browser
-            sebagai identitas. Gunakan data fiktif saat mencoba formulir; jangan
-            memasukkan kata sandi, nomor kartu, atau dokumen pribadi.
-          </p>
-          <p>
-            Kebijakan komersial final, pajak, garansi, retur, retensi data, dan
-            integrasi provider akan ditetapkan sebelum toko menerima transaksi
-            nyata. Kontak untuk pertanyaan:{' '}
-            <a href="mailto:klikfiber@gmail.com">klikfiber@gmail.com</a>.
-          </p>
-        </div>
+        <div className="panel prose"><h2>{page==='/privasi'?'Privasi pelanggan':'Informasi pemesanan'}</h2><p>Harga, ketersediaan, pengiriman, dan ketentuan garansi dikonfirmasi dalam penawaran sebelum pembayaran. Pembayaran otomatis belum tersedia.</p><p>Keranjang dan favorit tersimpan pada perangkat. Akun diverifikasi melalui Supabase Auth. Data yang Anda kirim melalui formulir disimpan untuk menangani permintaan Anda.</p><p>Untuk pertanyaan atau permintaan terkait data, hubungi <a href="mailto:klikfiber@gmail.com">klikfiber@gmail.com</a>.</p></div>
       ) : (
         <>
           <div className="info-cards">
@@ -1973,11 +1822,11 @@ export function Information({ page }: { page: string }) {
               {[
                 [
                   'Bagaimana cara membeli produk?',
-                  'Cari produk, pilih jumlah, tambahkan ke keranjang, lalu masuk ke akun uji. Isi alamat, pilih pengiriman, periksa total, dan lanjutkan ke pembayaran simulasi.',
+                  'Cari produk, pilih jumlah, tambahkan ke keranjang, lalu masuk ke akun Anda. Isi alamat, pilih pengiriman, periksa total, dan ajukan penawaran kepada tim.',
                 ],
                 [
                   'Apakah tersedia pengiriman ke luar kota?',
-                  'Layanan dan ongkir bergantung pada tujuan, berat, dimensi, dan jenis perangkat. Pada versi uji, ongkir adalah simulasi; barang kargo diarahkan melalui penawaran.',
+                  'Layanan dan ongkir bergantung pada tujuan, berat, dimensi, dan jenis perangkat. Pada layanan online, ongkir dikonfirmasi oleh tim; barang kargo diarahkan melalui penawaran.',
                 ],
                 [
                   'Bagaimana dengan garansi dan retur?',
@@ -1985,7 +1834,7 @@ export function Information({ page }: { page: string }) {
                 ],
                 [
                   'Bisa meminta penawaran untuk proyek?',
-                  'Bisa. Isi daftar produk, jumlah, lokasi, dan kebutuhan Anda pada halaman Minta Penawaran. Pengajuan uji dapat ditinjau dari Portal Staf.',
+                  'Bisa. Isi daftar produk, jumlah, lokasi, dan kebutuhan Anda pada halaman Minta Penawaran. Pengajuan  dapat ditinjau dari Portal Staf.',
                 ],
               ].map(([q, a]) => (
                 <details key={q}>

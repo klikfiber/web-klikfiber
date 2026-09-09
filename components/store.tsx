@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from 'react';
 import Link from 'next/link';
+import CustomerAuth from './customer-auth';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowRight,
@@ -67,6 +68,7 @@ import {
   Backoffice,
   QuoteForm,
   Information,
+  SalesPortal,
 } from '@/components/workflows';
 export async function api(path: string, body?: unknown) {
   const r = await fetch('/api/v1/' + path, {
@@ -349,37 +351,17 @@ export function Benefits() {
   );
 }
 function Home() {
-  return (
+ const [slide,setSlide]=useState(0);const [paused,setPaused]=useState(false);
+ const slides=[{title:'Klik kebutuhan fiber, beres.',text:'Perangkat presisi untuk koneksi tanpa batas.',label:'Jelajahi Produk',url:'/produk',tag:'SOLUSI KONEKTIVITAS ANDA'}, {title:'Punya kode referral?',text:'Masuk ke akun Anda untuk melihat informasi referral dan manfaat yang tersedia.',label:'Lihat Referral',url:'/akun/referral',tag:'KONEKSI YANG LEBIH BERARTI'}, {title:'Harga terbaik untuk proyek Anda.',text:'Konsultasikan volume pembelian untuk mendapatkan penawaran harga khusus.',label:'Minta Penawaran',url:'/penawaran',tag:'PENGADAAN BISNIS & PROYEK'}];
+ useEffect(()=>{if(paused || window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;const timer=setInterval(()=>setSlide(i=>(i+1)%slides.length),6000);return()=>clearInterval(timer);},[paused]);
+ const active=slides[slide];
+ return (
     <>
-      <section className="hero hero-refresh">
+      <section className="hero hero-refresh" aria-roledescription="carousel" aria-label="Informasi KLIKFIBER" onMouseEnter={()=>setPaused(true)} onMouseLeave={()=>setPaused(false)} onFocusCapture={()=>setPaused(true)}>
         <img className="hero-art" src="/images/fiber-hero-v2.png" alt="Detail konektor dan kabel fiber optik dengan pencahayaan studio" fetchPriority="high" />
         <div className="container hero-inner">
-          <div className="hero-copy">
-            <span className="kicker">
-              <span /> SOLUSI KONEKTIVITAS ANDA
-            </span>
-            <h1>
-              Klik kebutuhan
-              <br />
-              fiber, <em>beres.</em>
-            </h1>
-            <p>
-              Perangkat presisi untuk koneksi tanpa batas.
-              Lengkapi kebutuhan jaringan Anda.
-            </p>
-            <div className="row">
-              <Btn href="/produk">
-                Jelajahi Produk <ArrowRight size={18} />
-              </Btn>
-              <Btn outline href="/penawaran">
-                <FileText size={18} /> Minta Penawaran
-              </Btn>
-            </div>
-            <div className="hero-note">
-              <ShieldCheck size={17} /> Pilihan tepat untuk teknisi, ISP, dan
-              bisnis Anda
-            </div>
-          </div>
+          <div className="hero-copy" aria-live="off"><span className="kicker">{active.tag}</span><h1>{active.title}</h1><p>{active.text}</p><Btn href={active.url}>{active.label}<ArrowRight size={16}/></Btn></div>
+          <div className="slider-controls">{slides.map((item,i)=><button key={item.tag} aria-label={'Tampilkan slide '+(i+1)} aria-pressed={slide===i} onClick={()=>{setSlide(i);setPaused(true);}}/>)}<button className="slider-pause" aria-label={paused?'Putar banner':'Jeda banner'} onClick={()=>setPaused(!paused)}>{paused?'Putar':'Jeda'}</button></div>
         </div>
       </section>
       <div className="container">
@@ -650,12 +632,12 @@ function Catalog() {
             </div>
           )}
           <div className="catalog-foot">
-            Menampilkan {result.length} dari {products.length} produk contoh
+            Menampilkan {result.length} dari {products.length} produk
           </div>
         </div>
       </div>
       <Sheet open={drawer} onOpenChange={setDrawer}>
-        <SheetContent side="left" className="filter-sheet">
+        <SheetContent side="right" className="filter-sheet">
           <SheetTitle>Filter Produk</SheetTitle>
           {filters}
           <Btn onClick={() => setDrawer(false)}>
@@ -916,6 +898,11 @@ export default function Store() {
     clearCart: () => setCart([]),
     login: () => setLoginOpen(true),
     add: (p, qty = 1) => {
+      if (!profile) {
+        setLoginOpen(true);
+        notify('Masuk atau daftar untuk menambahkan produk', 'info');
+        return;
+      }
       if (!p.stock || p.quote) return;
       setCart((c) => {
         const previous = c.find((x) => x.id === p.id)?.qty || 0;
@@ -967,8 +954,6 @@ export default function Store() {
             <span>
               
               <Link href="/dukungan">Pusat Bantuan</Link>
-              <i />
-              <Link href="/admin">Portal Staf</Link>
             </span>
           </div>
         </div>
@@ -995,13 +980,6 @@ export default function Store() {
                 <ArrowRight size={18} />
               </button>
             </form>
-            <Link className="header-action account-action" href="/akun">
-              <UserRound size={24} />
-              <span>
-                <small>Selamat datang</small>
-                <strong>{profile ? profile.name : 'Akun Saya'}</strong>
-              </span>
-            </Link>
             <Link className="header-action cart-link" href="/keranjang">
               <span className="cart-icon">
                 <ShoppingCart size={25} />
@@ -1046,6 +1024,8 @@ export default function Store() {
             <Account />
           ) : path.startsWith('/admin') || path.startsWith('/marketing') ? (
             <Backoffice />
+          ) : path.startsWith('/sales') ? (
+            <SalesPortal />
           ) : path === '/penawaran' ? (
             <QuoteForm />
           ) : (
@@ -1086,7 +1066,6 @@ export default function Store() {
                 ['Tentang KLIKFIBER', '/tentang'],
                 ['Solusi Proyek', '/solusi'],
                 ['Penawaran B2B', '/penawaran'],
-                ['Portal Staf', '/admin'],
               ],
             ].map(([title, ...links]: any) => (
               <div key={title}>
@@ -1116,10 +1095,6 @@ export default function Store() {
               <Link href="/privasi">Kebijakan Privasi</Link>
             </span>
           </div>
-          <div className="demo-footer">
-            Lingkungan uji · Produk, harga, stok, pembayaran, dan pengiriman
-            adalah simulasi.
-          </div>
         </footer>
         <nav className="bottom-nav mobile" aria-label="Navigasi utama mobile">
           {[
@@ -1137,7 +1112,7 @@ export default function Store() {
         <Sheet open={menu} onOpenChange={setMenu}>
           <SheetContent side="left">
             <SheetTitle>Jelajahi KLIKFIBER</SheetTitle>
-            <p className="menu-intro">Semua kebutuhan jaringan, dalam satu tempat.</p>
+            <p className="menu-intro">Belanja, konsultasi, dan bantuan.</p>
             <nav className="sheet-nav">
               {[
                 ['Beranda', '/'],
@@ -1147,7 +1122,7 @@ export default function Store() {
                 ['Tentang Kami', '/tentang'],
                 ['Promo', '/promo'],
                 ['Akun Saya', '/akun'],
-                ['Portal Staf', '/admin'],
+                ['Daftar Sales', '/sales'],
               ].map(([label, url]) => (
                 <Link key={url} href={url} onClick={() => setMenu(false)}>
                   {label}
@@ -1160,40 +1135,8 @@ export default function Store() {
         <Dialog open={loginOpen} onOpenChange={setLoginOpen}>
           <DialogContent className="login-dialog">
             <DialogTitle>Selamat datang di KLIKFIBER</DialogTitle>
-            <DialogDescription>
-              Masuk ke akun uji untuk menyimpan alamat, membuat pesanan
-              simulasi, dan mencoba pengadaan proyek.
-            </DialogDescription>
-            <div className="info-strip">
-              <LockKeyhole />
-              <span>
-                Tidak perlu email atau kata sandi asli. Akun uji ini hanya untuk
-                sesi browser Anda.
-              </span>
-            </div>
-            <Btn
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true);
-                try {
-                  await api('auth/demo', {});
-                  await refresh();
-                  setLoginOpen(false);
-                  notify('Berhasil masuk ke akun uji');
-                } catch (e: any) {
-                  notify(e.message, 'error');
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              {busy ? 'Menyiapkan akun…' : 'Masuk sebagai pelanggan uji'}
-              <ArrowRight size={18} />
-            </Btn>
-            <p className="small muted">
-              Google dan email OTP diaktifkan setelah konfigurasi provider
-              tersedia.
-            </p>
+            <DialogDescription>Masuk atau daftar untuk melanjutkan pembelian dan mengelola pesanan.</DialogDescription>
+            <CustomerAuth done={async()=>{await refresh();setLoginOpen(false);}} />
           </DialogContent>
         </Dialog>
       </Toaster>

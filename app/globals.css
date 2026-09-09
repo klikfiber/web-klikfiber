@@ -2334,10 +2334,15 @@ textarea {
     width: 12px;
   }
   .category-grid {
+    display:flex;
     gap: 8px;
-    grid-template-columns: repeat(3, 1fr);
+    overflow-x:auto;
+    scroll-snap-type:x mandatory;
+    padding-bottom:6px;
   }
   .category-grid a {
+    flex:0 0 112px;
+    scroll-snap-align:start;
     padding: 13px 7px;
     flex-direction: column;
     gap: 8px;
@@ -2981,3 +2986,31 @@ textarea {
  .benefits { margin-top:8px; }
 }
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { scroll-behavior:auto!important; } }
+/* Compact right-hand utility menu and accessible promotional slides */
+.hero-refresh .hero-copy h1 { max-width:520px; }
+.slider-controls { position:absolute; bottom:18px; left:0; display:flex; align-items:center; gap:7px; }
+.slider-controls button:not(.slider-pause) { width:8px; height:8px; border-radius:20px; background:#ffffff70; border:0; padding:0; cursor:pointer; }
+.slider-controls button[aria-pressed=true] { width:26px; background:#27cde4; }
+.slider-controls .slider-pause { color:#d5e7f4; font-size:11px; padding:6px 10px; }
+.quick-menu { width:min(340px,90vw)!important; padding:24px!important; gap:12px!important; }
+.quick-menu .menu-intro { padding:0; margin:0; font-size:13px; }
+.quick-menu .sheet-nav { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:12px 0; }
+.quick-menu .sheet-nav a { margin:0; padding:14px 12px; min-height:58px; font-size:13px; border:1px solid #e7edf3; background:white; }
+.customer-auth { display:grid; gap:12px; }
+.auth-toggle { display:flex; background:#f0f5f8; border-radius:12px; padding:4px; }
+.auth-toggle button { width:50%; padding:10px; border-radius:9px; }
+.auth-toggle button[aria-pressed=true] { background:white; box-shadow:0 2px 8px #0b1f3a10; }
+.customer-auth form { display:grid; gap:12px; }
+.customer-auth label { display:grid; gap:6px; font-size:13px; }
+.customer-auth input { padding:12px; border:1px solid #d8e2eb; border-radius:9px; }
+.auth-divider { font-size:12px; color:#748397; text-align:center; }
+.sales-grid { display:grid; grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr); gap:20px; }
+.sales-count { display:block; font-size:46px; color:#049dbd; margin-top:12px; }
+.sales-page .panel { padding:28px; }
+@media(max-width:767px) {
+ .header-main .logo { grid-column:1/3; justify-self:start; }
+ .header-main .menu-toggle { grid-column:3; justify-self:end; }
+ .hero-refresh .hero-copy h1 { max-width:255px; font-size:32px; }
+ .slider-controls { bottom:12px; }
+ .sales-grid { grid-template-columns:1fr; }
+}

@@ -22,6 +22,8 @@ export type Product = {
   description: string;
   unit?: string;
   quote?: boolean;
+  weight?: number;
+  dimensions?: { length: number; width: number; height: number };
   specs: Record<string, string>;
 };
 export const products: Product[] = [
@@ -68,22 +70,21 @@ export const products: Product[] = [
   },
   {
     id: 'ucl-swift-k11',
-    name: 'SWIFT K11 Fusion Splicer',
-    model: 'UCL SWIFT K11',
-    category: categories[1],
-    price: 2850000,
+    name: 'Optical Power Meter FTTH',
+    model: 'OPM-70',
+    category: categories[2],
+    price: 1250000,
     stock: 12,
     image: 2,
-    imageSrc: '/images/ucl-k11.png',
-    sourceUrl: 'https://uclswift.com/sub/prd-detail/39',
-    sourceLabel: 'Spesifikasi produsen UCL Swift',
+    imageSrc: '/images/fabeal-opm-studio.png',
+    sourceUrl: 'https://fabeal.co.id/',
+    sourceLabel: 'Kategori alat ukur Fabeal',
     description:
-      'Fusion splicer core alignment dengan layar sentuh untuk pekerjaan instalasi profesional.',
+      'Alat ukur daya optik portabel untuk instalasi, pemeliharaan, dan pemeriksaan jaringan FTTH.',
     specs: {
-      'Metode alignment': 'IPAAS Core Alignment',
-      'Waktu splicing tipikal': '6 detik (Quick mode)',
-      Layar: 'Touchscreen elektrostatis 5,0 inci',
-      Baterai: 'Tipikal 270 siklus (4.700 mAh)',
+      Fungsi: 'Pengukuran daya optik',
+      Penggunaan: 'FTTH dan jaringan akses',
+      Tampilan: 'LCD digital',
     },
   },
   {
@@ -173,6 +174,9 @@ export const products: Product[] = [
     price: 750000,
     stock: 18,
     image: 8,
+    imageSrc: '/images/fabeal-odp-studio.png',
+    sourceUrl: 'https://fabeal.co.id/',
+    sourceLabel: 'Kategori FTTH Fabeal',
     description:
       'Panel distribusi untuk pengelolaan koneksi serat optik yang rapi.',
     specs: { Port: '24', Konektor: 'SC/UPC' },
@@ -185,6 +189,9 @@ export const products: Product[] = [
     price: 985000,
     stock: 22,
     image: 9,
+    imageSrc: '/images/fabeal-odp-studio.png',
+    sourceUrl: 'https://fabeal.co.id/',
+    sourceLabel: 'Kategori FTTH Fabeal',
     description: 'Pelindung sambungan fiber optik untuk jaringan distribusi.',
     specs: { 'Kapasitas contoh': '24 core', Kategori: 'Closure' },
   },
