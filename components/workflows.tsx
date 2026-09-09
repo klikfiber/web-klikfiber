@@ -118,12 +118,12 @@ function Loading() {
 }
 function LoginGate() {
   const path = usePathname();
-  const area = path.startsWith('/admin') || path.startsWith('/marketing') ? 'Admin' : path.startsWith('/sales') ? 'Sales' : '';
+  const area = path.startsWith('/myshop') || path.startsWith('/admin') || path.startsWith('/marketing') ? 'Admin' : path.startsWith('/sales') ? 'Sales' : '';
   return (
-    <div className="account-signin">
-      <span className="kicker">AKUN KLIKFIBER.ID</span>
+    <div className={`account-signin signin-${area.toLowerCase() || 'customer'}`}>
+      <span className="kicker">{area === 'Admin' ? 'PENGELOLA TOKO' : area === 'Sales' ? 'MITRA PENJUALAN' : 'AKUN KLIKFIBER.ID'}</span>
       <h1>{area ? `Masuk ${area} Area` : 'Selamat datang di KLIKFIBER'}</h1>
-      <p>Masuk atau daftar untuk melanjutkan.</p>
+      <p>{area === 'Admin' ? 'Masuk dengan akun pengelola yang telah diberi akses.' : area === 'Sales' ? 'Kelola referral dan pantau peluang penjualan Anda.' : 'Masuk atau daftar untuk melanjutkan.'}</p>
       <CustomerAuth done={() => location.reload()} />
     </div>
   );
@@ -250,7 +250,6 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
   if (!s.cart.length)
     return (
       <main className="container page empty">
-        <CustomerNavigation />
         <ShoppingCart size={55} />
         <h1>Keranjang Anda masih kosong</h1>
         <p>Temukan perangkat yang tepat untuk proyek berikutnya.</p>
@@ -261,7 +260,6 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
     );
   return (
     <main className="container page checkout-page">
-      <CustomerNavigation />
       <div className="steps">
         {['Keranjang', 'Alamat & Pengiriman', 'Pembayaran'].map((t, i) => (
           <div key={t} className={i <= step ? 'active' : ''}>
@@ -738,11 +736,11 @@ export function Account() {
     [UserRound, 'Profil', '/akun/profil'],
   ];
   const selected = path.split('/')[3];
-  if (path === '/akun') return <main className="container page"><LoginGate /><nav className="login-areas"><Link href="/sales">Sales Area</Link><Link href="/admin">Admin Area</Link><Link href="/keranjang">Keranjang & pesanan</Link></nav></main>;
+  if (!s.profile) return <main className="container page"><LoginGate /></main>;
   return (
     <main className="container page">
       <div className="account-layout">
-        <aside className="account-sidebar">
+        <aside className="account-sidebar panel buyer-menu-card">
           <div className="account-avatar">
             <UserRound />
             <strong>{s.profile?.name || 'Akun Saya'}</strong>
@@ -1854,7 +1852,7 @@ export function Information({ page }: { page: string }) {
             </section>
             <aside className="panel contact-panel">
               <MapPin />
-              <h2>Kunjungi kantor kami</h2>
+              <h2>PT KARYA FABEAL SUKSES</h2>
               <p>{office}</p>
               <a href="mailto:klikfiber@gmail.com">
                 <Mail size={18} /> klikfiber@gmail.com

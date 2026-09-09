@@ -360,7 +360,6 @@ function Home() {
         <div className="banner-track">{['Kabel fiber optik','Fusion splicer','Patch panel','Peralatan instalasi'].map((label,i)=><Link href="/produk" key={label} className="banner-slide" aria-label={label}><img src={`/images/banner-${i+1}.png`} alt={label} loading={i===0?'eager':'lazy'}/></Link>)}</div>
         <div className="banner-caption"><h1>Fiber siap kerja.</h1><Link href="/produk">Jelajahi produk →</Link></div>
       </section>      <div className="container">
-        <Benefits />
         <section className="section">
           <SectionHead
             title="Temukan kebutuhan Anda"
@@ -746,7 +745,6 @@ function Detail({ id }: { id: string }) {
           )}
         </div>
       </div>
-      <Benefits />
       <Tabs defaultValue="description" className="detail-tabs">
         <TabsList variant="line">
           {[
@@ -1011,7 +1009,7 @@ export default function Store() {
             <Checkout paymentId={path.split('/')[2]} />
           ) : path.startsWith('/akun') ? (
             <Account />
-          ) : path.startsWith('/admin') || path.startsWith('/marketing') ? (
+          ) : path.startsWith('/myshop') || path.startsWith('/admin') || path.startsWith('/marketing') ? (
             <Backoffice />
           ) : path.startsWith('/sales') ? (
             <SalesPortal />
@@ -1026,6 +1024,8 @@ export default function Store() {
             <div>
               <Logo />
               <p>
+                PT KARYA FABEAL SUKSES
+                <br />
                 Menghubungkan kebutuhan.
                 <br />
                 Membangun masa depan.
@@ -1048,7 +1048,8 @@ export default function Store() {
                 ['Pusat Bantuan', '/dukungan'],
                 ['Pengiriman', '/pengiriman'],
                 ['Garansi & Retur', '/garansi'],
-                ['Hubungi Kami', '/penawaran'],
+                ['Hubungi Kami', '/dukungan'],
+                ['Sales Area', '/sales'],
               ],
               [
                 'Perusahaan',
@@ -1102,7 +1103,6 @@ export default function Store() {
                 ['Tentang Kami', '/tentang'],
                 ['Promo', '/promo'],
                 ['Akun Saya', '/akun'],
-                ['Daftar Sales', '/sales'],
               ].map(([label, url]) => (
                 <Link key={url} href={url} onClick={() => setMenu(false)}>
                   {label}
