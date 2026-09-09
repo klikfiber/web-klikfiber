@@ -213,7 +213,7 @@ async function handle(req: Request) {
   if (rpath === 'auth/demo' || rpath === 'auth/demo-role' || path.includes('simulate-payment')) throw new BusinessError('Layanan tidak tersedia.', 410);
   const auth = await authServer();
   const { data: { user } } = await auth.auth.getUser();
-  const staffRole = user?.email?.toLowerCase() === 'klikfiber@gmail.com' ? 'admin' : user?.app_metadata?.staffRole;
+  const staffRole = user?.email_confirmed_at && user.email?.toLowerCase() === 'klikfiber@gmail.com' ? 'owner' : user?.app_metadata?.staffRole;
   const session = user ? { id: user.id, profile: JSON.stringify({id:user.id,name:user.user_metadata?.full_name || user.email?.split('@')[0] || 'Pelanggan',email:user.email,staffRole}) } : null;
   if (path[0] === 'products')
     return respond(

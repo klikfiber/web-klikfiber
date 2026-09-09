@@ -1,6 +1,7 @@
 'use client';
 import {
   useEffect,
+  useRef,
   useState,
   createContext,
   useContext,
@@ -351,20 +352,14 @@ export function Benefits() {
   );
 }
 function Home() {
- const [slide,setSlide]=useState(0);const [paused,setPaused]=useState(false);
- const slides=[{title:'Fiber siap kerja.',text:'Perangkat pilihan untuk instalasi yang presisi.',label:'Belanja Sekarang',url:'/produk',tag:'KLIKFIBER.ID'}, {title:'Bagikan. Dapatkan reward.',text:'Gunakan kode referral dari sales KLIKFIBER.',label:'Lihat Program',url:'/sales',tag:'PROGRAM REFERRAL'}, {title:'Kebutuhan proyek?',text:'Dapatkan harga sesuai volume dan kebutuhan.',label:'Minta Penawaran',url:'/penawaran',tag:'SOLUSI B2B'}];
- useEffect(()=>{if(paused || window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;const timer=setInterval(()=>setSlide(i=>(i+1)%slides.length),6000);return()=>clearInterval(timer);},[paused]);
- const active=slides[slide];
- return (
-    <>
-      <section className="hero hero-refresh" aria-roledescription="carousel" aria-label="Informasi KLIKFIBER" onMouseEnter={()=>setPaused(true)} onMouseLeave={()=>setPaused(false)} onFocusCapture={()=>setPaused(true)}>
-        <img className="hero-art" src="/images/fiber-hero-v2.png" alt="Detail konektor dan kabel fiber optik dengan pencahayaan studio" fetchPriority="high" />
-        <div className="container hero-inner">
-          <div className="hero-copy" aria-live="off"><span className="kicker">{active.tag}</span><h1>{active.title}</h1><p>{active.text}</p><Btn href={active.url}>{active.label}<ArrowRight size={16}/></Btn></div>
-          <div className="slider-controls">{slides.map((item,i)=><button key={item.tag} aria-label={'Tampilkan slide '+(i+1)} aria-pressed={slide===i} onClick={()=>{setSlide(i);setPaused(true);}}/>)}<button className="slider-pause" aria-label={paused?'Putar banner':'Jeda banner'} onClick={()=>setPaused(!paused)}>{paused?'Putar':'Jeda'}</button></div>
-        </div>
-      </section>
-      <div className="container">
+ const [categoryPaused,setCategoryPaused]=useState(false);
+ const categoryRef=useRef<HTMLDivElement>(null);
+ useEffect(()=>{if(categoryPaused || matchMedia('(prefers-reduced-motion: reduce)').matches)return;const timer=setInterval(()=>{const el=categoryRef.current;if(el)el.scrollTo({left:el.scrollLeft+130>=el.scrollWidth-el.clientWidth?0:el.scrollLeft+130,behavior:'smooth'});},3500);return()=>clearInterval(timer);},[categoryPaused]);
+ return (<>
+      <section className="image-banner" aria-label="Pilihan perangkat KLIKFIBER">
+        <div className="banner-track">{['Kabel fiber optik','Fusion splicer','Patch panel','Peralatan instalasi'].map((label,i)=><Link href="/produk" key={label} className="banner-slide" aria-label={label}><img src={`/images/banner-${i+1}.png`} alt={label} loading={i===0?'eager':'lazy'}/></Link>)}</div>
+        <div className="banner-caption"><h1>Fiber siap kerja.</h1><Link href="/produk">Jelajahi produk →</Link></div>
+      </section>      <div className="container">
         <Benefits />
         <section className="section">
           <SectionHead
@@ -373,7 +368,7 @@ function Home() {
             href="/produk"
             label="Semua kategori"
           />
-          <div className="category-grid">
+          <div className="category-grid" ref={categoryRef} onTouchStart={()=>setCategoryPaused(true)} onMouseEnter={()=>setCategoryPaused(true)} onMouseLeave={()=>setCategoryPaused(false)}>
             {[
               [Cable, 3, 'Kabel Fiber Optik'],
               [Zap, 4, 'Konektor & Adapter'],
@@ -939,7 +934,7 @@ export default function Store() {
         <a href="#main" className="skip-link">
           Lewati ke konten
         </a>
-        <div className="topbar">
+        {path === '/' && <><div className="topbar">
           <div className="container">
             <span>
               <Truck size={14} /> Solusi fiber untuk Indonesia yang lebih
@@ -961,7 +956,7 @@ export default function Store() {
               <Menu />
             </button>
             <Logo />
-            {(path === '/' || path.startsWith('/produk')) && <form className="search header-search" action="/produk">
+            <form className="search header-search" action="/produk">
               <Search size={19} />
               <input
                 name="q"
@@ -973,7 +968,7 @@ export default function Store() {
               <button aria-label="Cari">
                 <ArrowRight size={18} />
               </button>
-            </form>}
+            </form>
             <Link className="header-action cart-link" href="/keranjang">
               <span className="cart-icon">
                 <ShoppingCart size={25} />
@@ -1002,7 +997,7 @@ export default function Store() {
               <Headset size={17} /> Siap bantu kebutuhan Anda
             </span>
           </nav>
-        </header>
+        </header></>}
         <div id="main">
           {path === '/' ? (
             <Home />
@@ -1128,3 +1123,4 @@ export default function Store() {
     </Context.Provider>
   );
 }
+

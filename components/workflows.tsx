@@ -117,10 +117,12 @@ function Loading() {
   );
 }
 function LoginGate() {
+  const path = usePathname();
+  const area = path.startsWith('/admin') || path.startsWith('/marketing') ? 'Admin' : path.startsWith('/sales') ? 'Sales' : '';
   return (
     <div className="account-signin">
       <span className="kicker">AKUN KLIKFIBER.ID</span>
-      <h1>Selamat datang di KLIKFIBER</h1>
+      <h1>{area ? `Masuk ${area} Area` : 'Selamat datang di KLIKFIBER'}</h1>
       <p>Masuk atau daftar untuk melanjutkan.</p>
       <CustomerAuth done={() => location.reload()} />
     </div>
@@ -248,6 +250,7 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
   if (!s.cart.length)
     return (
       <main className="container page empty">
+        <CustomerNavigation />
         <ShoppingCart size={55} />
         <h1>Keranjang Anda masih kosong</h1>
         <p>Temukan perangkat yang tepat untuk proyek berikutnya.</p>
@@ -258,6 +261,7 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
     );
   return (
     <main className="container page checkout-page">
+      <CustomerNavigation />
       <div className="steps">
         {['Keranjang', 'Alamat & Pengiriman', 'Pembayaran'].map((t, i) => (
           <div key={t} className={i <= step ? 'active' : ''}>
@@ -690,6 +694,9 @@ function OrderView({ order, reload }: { order: any; reload: () => void }) {
     </section>
   );
 }
+function CustomerNavigation() {
+ return <nav className="customer-navigation" aria-label="Pesanan dan akun"><Link href="/akun/ringkasan">Ringkasan</Link><Link href="/akun/pesanan">Pesanan Saya</Link><Link href="/akun/alamat">Alamat</Link><Link href="/akun/wishlist">Wishlist</Link><Link href="/akun/penawaran">Penawaran</Link></nav>;
+}
 export function Account() {
   const s = useStore();
   const path = usePathname();
@@ -731,6 +738,7 @@ export function Account() {
     [UserRound, 'Profil', '/akun/profil'],
   ];
   const selected = path.split('/')[3];
+  if (path === '/akun') return <main className="container page"><LoginGate /><nav className="login-areas"><Link href="/sales">Sales Area</Link><Link href="/admin">Admin Area</Link><Link href="/keranjang">Keranjang & pesanan</Link></nav></main>;
   return (
     <main className="container page">
       <div className="account-layout">
