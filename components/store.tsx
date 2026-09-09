@@ -351,7 +351,8 @@ export function Benefits() {
 function Home() {
   return (
     <>
-      <section className="hero">
+      <section className="hero hero-refresh">
+        <img className="hero-art" src="/images/fiber-hero-v2.png" alt="Detail konektor dan kabel fiber optik dengan pencahayaan studio" fetchPriority="high" />
         <div className="container hero-inner">
           <div className="hero-copy">
             <span className="kicker">
@@ -363,8 +364,8 @@ function Home() {
               fiber, <em>beres.</em>
             </h1>
             <p>
-              Perangkat, aksesori, dan solusi fiber optik berkualitas untuk
-              proyek Anda. Semua di satu tempat.
+              Perangkat presisi untuk koneksi tanpa batas.
+              Lengkapi kebutuhan jaringan Anda.
             </p>
             <div className="row">
               <Btn href="/produk">
@@ -378,19 +379,6 @@ function Home() {
               <ShieldCheck size={17} /> Pilihan tepat untuk teknisi, ISP, dan
               bisnis Anda
             </div>
-          </div>
-          <div className="hero-product">
-            <ProductImage p={products[0]} large />
-            <div className="hero-product-label">
-              <span className="tiny-pill">PROFESSIONAL SERIES</span>
-              <strong>Presisi di setiap sambungan.</strong>
-              <span>Fusion Splicer · Core Alignment</span>
-            </div>
-          </div>
-          <div className="hero-pagination">
-            <span />
-            <span />
-            <span />
           </div>
         </div>
       </section>
@@ -977,7 +965,7 @@ export default function Store() {
               terhubung
             </span>
             <span>
-              <span className="demo-dot" /> MODE UJI <i />{' '}
+              
               <Link href="/dukungan">Pusat Bantuan</Link>
               <i />
               <Link href="/admin">Portal Staf</Link>
@@ -1133,22 +1121,23 @@ export default function Store() {
             adalah simulasi.
           </div>
         </footer>
-        <nav className="bottom-nav mobile">
+        <nav className="bottom-nav mobile" aria-label="Navigasi utama mobile">
           {[
             [Grid2X2, 'Beranda', '/'],
             [Cable, 'Produk', '/produk'],
-            [Heart, 'Favorit', '/akun/wishlist'],
+            [ShoppingCart, 'Keranjang', '/keranjang'],
             [UserRound, 'Akun', '/akun'],
           ].map(([Icon, label, url]: any) => (
-            <Link key={url} href={url} className={path === url ? 'active' : ''}>
-              <Icon size={22} />
+            <Link key={url} href={url} className={(url === '/' ? path === '/' : path.startsWith(url)) ? 'active' : ''} aria-current={(url === '/' ? path === '/' : path.startsWith(url)) ? 'page' : undefined}>
+              <span className="bottom-icon"><Icon size={22} />{url === '/keranjang' && count > 0 && <b className="nav-cart-count">{count > 99 ? '99+' : count}</b>}</span>
               <span>{label}</span>
             </Link>
           ))}
         </nav>
         <Sheet open={menu} onOpenChange={setMenu}>
           <SheetContent side="left">
-            <SheetTitle>Menu KLIKFIBER</SheetTitle>
+            <SheetTitle>Jelajahi KLIKFIBER</SheetTitle>
+            <p className="menu-intro">Semua kebutuhan jaringan, dalam satu tempat.</p>
             <nav className="sheet-nav">
               {[
                 ['Beranda', '/'],
@@ -1160,7 +1149,7 @@ export default function Store() {
                 ['Akun Saya', '/akun'],
                 ['Portal Staf', '/admin'],
               ].map(([label, url]) => (
-                <Link key={url} href={url}>
+                <Link key={url} href={url} onClick={() => setMenu(false)}>
                   {label}
                   <ChevronRight size={17} />
                 </Link>
