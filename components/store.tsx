@@ -101,21 +101,7 @@ export const useStore = () => useContext(Context);
 export function Logo() {
   return (
     <Link className="logo" href="/" aria-label="KLIKFIBER beranda">
-      <svg viewBox="0 0 50 50" aria-hidden="true">
-        <path fill="#0B1F3A" d="M4 3h12v44H8l-4-5z" />
-        <path fill="#00A6C8" d="M18 23 36 3h14L28 25l22 22H35L17 28z" />
-        <circle
-          cx="16"
-          cy="25"
-          r="6"
-          fill="#00A6C8"
-          stroke="white"
-          strokeWidth="3"
-        />
-      </svg>
-      <span>
-        KLIK<b>FIBER</b>
-      </span>
+      <img src="/images/klikfiber-brand.png" alt="Klikfiber.id — Connecting a stronger tomorrow" width={2172} height={724} />
     </Link>
   );
 }
@@ -357,8 +343,8 @@ function Home() {
  useEffect(()=>{if(categoryPaused || matchMedia('(prefers-reduced-motion: reduce)').matches)return;const timer=setInterval(()=>{const el=categoryRef.current;if(el)el.scrollTo({left:el.scrollLeft+130>=el.scrollWidth-el.clientWidth?0:el.scrollLeft+130,behavior:'smooth'});},3500);return()=>clearInterval(timer);},[categoryPaused]);
  return (<>
       <section className="image-banner" aria-label="Pilihan perangkat KLIKFIBER">
-        <div className="banner-track">{['Kabel fiber optik','Fusion splicer','Patch panel','Peralatan instalasi'].map((label,i)=><Link href="/produk" key={label} className="banner-slide" aria-label={label}><img src={`/images/banner-${i+1}.png`} alt={label} loading={i===0?'eager':'lazy'}/></Link>)}</div>
-        <div className="banner-caption"><h1>Fiber siap kerja.</h1><Link href="/produk">Jelajahi produk →</Link></div>
+        <div className="banner-track">{['Kabel fiber optik','Fusion splicer','Patch panel','Peralatan instalasi'].map((label,i)=><Link href="/produk" key={label} className="banner-slide" aria-label={label}><img src={i===0 ? "/images/hero-datacenter.png" : `/images/banner-${i+1}.png`} alt={label} loading={i===0?'eager':'lazy'}/></Link>)}</div>
+        <div className="banner-caption"><span className="brand-eyebrow">CONNECTING A STRONGER TOMORROW</span><h1>Infrastruktur andal.<br/>Koneksi tanpa batas.</h1><Link href="/produk">Jelajahi Produk <ArrowRight size={17}/></Link></div>
       </section>      <div className="container">
         <section className="section">
           <SectionHead
@@ -1123,4 +1109,5 @@ export default function Store() {
     </Context.Provider>
   );
 }
+
 
