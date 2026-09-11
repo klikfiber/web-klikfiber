@@ -3055,6 +3055,7 @@ textarea {
 .detail-tabs [data-slot='tabs-content'] { width:100%; max-width:100%; overflow-wrap:anywhere; word-break:normal; background:#f8fafc; border:1px solid #e4ebf1; border-radius:14px; padding:22px; }
 .detail-tabs [data-slot='tabs-content'] > * { max-width:100%; }
 .customer-auth { display:grid; gap:12px; }
+.google-signin-wrap { display:grid; place-items:center; min-height:44px; overflow:hidden; }
 .auth-toggle { display:flex; background:#f0f5f8; border-radius:12px; padding:4px; }
 .auth-toggle button { width:50%; padding:10px; border-radius:9px; }
 .auth-toggle button[aria-pressed=true] { background:white; box-shadow:0 2px 8px #0B132B10; }

@@ -1,11 +1,52 @@
 'use client';
-import {useState} from 'react';
+
+import {useEffect,useRef,useState} from 'react';
 import {createBrowserClient} from '@supabase/ssr';
 import {authUrl,authKey} from '@/lib/auth/config';
-export default function CustomerAuth({done}:{done:()=>void}) {
- const [register,setRegister]=useState(false),[email,setEmail]=useState(''),[password,setPassword]=useState(''),[busy,setBusy]=useState(false),[message,setMessage]=useState('');
- const client=()=>createBrowserClient(authUrl,authKey);
- async function google(){setBusy(true);setMessage('');try { const response=await fetch(authUrl+'/auth/v1/settings',{headers:{apikey:authKey}});const settings=await response.json() as {external?:{google?:boolean}};if(!response.ok || !settings.external?.google){setMessage('Login Google sedang disiapkan. Silakan gunakan email.');setBusy(false);return;} } catch {setMessage('Koneksi belum tersedia. Silakan coba lagi.');setBusy(false);return;}const {error}=await client().auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+'/auth/callback'}});if(error){setMessage('Login Google belum tersedia. Gunakan email atau hubungi tim KLIKFIBER.');setBusy(false);}}
- return <div className="customer-auth"><div className="auth-toggle"><button type="button" aria-pressed={!register} onClick={()=>setRegister(false)}>Masuk</button><button type="button" aria-pressed={register} onClick={()=>setRegister(true)}>Daftar</button></div><button className="btn outline" disabled={busy} onClick={google}><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.39-.18-2.05H12v3.88h5.38a4.6 4.6 0 0 1-2 3.02v2.51h3.24c1.89-1.74 2.98-4.3 2.98-7.36Z"/><path fill="#34A853" d="M12 22c2.7 0 4.96-.9 6.62-2.41l-3.24-2.51c-.9.6-2.05.96-3.38.96-2.6 0-4.8-1.76-5.59-4.12H3.07v2.59A10 10 0 0 0 12 22Z"/><path fill="#FBBC05" d="M6.41 13.92a6 6 0 0 1 0-3.84V7.49H3.07a10 10 0 0 0 0 9.02l3.34-2.59Z"/><path fill="#EA4335" d="M12 5.96c1.47 0 2.79.5 3.83 1.5l2.87-2.87A9.63 9.63 0 0 0 12 2a10 10 0 0 0-8.93 5.49l3.34 2.59C7.2 7.72 9.4 5.96 12 5.96Z"/></svg> Masuk dengan Google</button><p className="auth-divider">atau gunakan email</p><form onSubmit={async e=>{e.preventDefault();setBusy(true);setMessage('');try{const {data,error}=register?await client().auth.signUp({email,password,options:{emailRedirectTo:location.origin+'/auth/callback'}}):await client().auth.signInWithPassword({email,password});if(error)throw error;if(data.session){done();}else setMessage('Periksa email Anda untuk mengonfirmasi pendaftaran.');}catch{setMessage('Belum berhasil. Periksa email dan kata sandi, atau coba beberapa saat lagi.');}finally{setBusy(false);}}}><label>Email<input type="email" autoComplete="email" required value={email} onChange={e=>setEmail(e.target.value)}/></label><label>Kata sandi<input type="password" minLength={8} required autoComplete={register?'new-password':'current-password'} value={password} onChange={e=>setPassword(e.target.value)}/></label><button className="btn" disabled={busy}>{busy?'Memproses…':register?'Buat akun':'Masuk'}</button></form>{message&&<p role="status">{message}</p>}<p className="small muted">Dengan melanjutkan, Anda menyetujui <a href="/syarat">Syarat & Ketentuan</a> dan <a href="/privasi">Kebijakan Privasi</a>.</p></div>;
+
+const googleClientId=process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '287724726112-bbm7qv7psodhdj73glho9jcrc23mk1fh.apps.googleusercontent.com';
+
+type GoogleCredentialResponse={credential:string};
+type GoogleIdentity={
+ initialize:(options:{client_id:string;callback:(response:GoogleCredentialResponse)=>void;auto_select?:boolean})=>void;
+ renderButton:(element:HTMLElement,options:{theme:string;size:string;text:string;shape:string;width:number})=>void;
+};
+
+declare global {
+ interface Window {google?:{accounts:{id:GoogleIdentity}}}
 }
 
+export default function CustomerAuth({done}:{done:()=>void}) {
+ const [register,setRegister]=useState(false),[email,setEmail]=useState(''),[password,setPassword]=useState(''),[busy,setBusy]=useState(false),[message,setMessage]=useState('');
+ const googleButton=useRef<HTMLDivElement>(null);
+ const doneRef=useRef(done);doneRef.current=done;
+ const client=()=>createBrowserClient(authUrl,authKey);
+
+ useEffect(()=>{
+  let active=true;
+  const render=()=>{
+   if(!active||!googleButton.current||!window.google)return;
+   googleButton.current.replaceChildren();
+   window.google.accounts.id.initialize({
+    client_id:googleClientId,
+    auto_select:false,
+    callback:async response=>{
+     setBusy(true);setMessage('');
+     const {error}=await client().auth.signInWithIdToken({provider:'google',token:response.credential});
+     if(error)setMessage('Login Google belum berhasil. Silakan coba lagi.');
+     else doneRef.current();
+     setBusy(false);
+    }
+   });
+   window.google.accounts.id.renderButton(googleButton.current,{theme:'outline',size:'large',text:'signin_with',shape:'rectangular',width:320});
+  };
+  const existing=document.querySelector<HTMLScriptElement>('script[data-google-identity]');
+  if(existing){if(window.google)render();else existing.addEventListener('load',render,{once:true});}
+  else {
+   const script=document.createElement('script');script.src='https://accounts.google.com/gsi/client';script.async=true;script.defer=true;script.dataset.googleIdentity='true';script.addEventListener('load',render,{once:true});document.head.appendChild(script);
+  }
+  return()=>{active=false;};
+ },[]);
+
+ return <div className="customer-auth"><div className="auth-toggle"><button type="button" aria-pressed={!register} onClick={()=>setRegister(false)}>Masuk</button><button type="button" aria-pressed={register} onClick={()=>setRegister(true)}>Daftar</button></div><div className="google-signin-wrap" aria-busy={busy}><div ref={googleButton}/></div><p className="auth-divider">atau gunakan email</p><form onSubmit={async e=>{e.preventDefault();setBusy(true);setMessage('');try{const {data,error}=register?await client().auth.signUp({email,password,options:{emailRedirectTo:location.origin+'/auth/callback'}}):await client().auth.signInWithPassword({email,password});if(error)throw error;if(data.session){done();}else setMessage('Periksa email Anda untuk mengonfirmasi pendaftaran.');}catch{setMessage('Belum berhasil. Periksa email dan kata sandi, atau coba beberapa saat lagi.');}finally{setBusy(false);}}}><label>Email<input type="email" autoComplete="email" required value={email} onChange={e=>setEmail(e.target.value)}/></label><label>Kata sandi<input type="password" minLength={8} required autoComplete={register?'new-password':'current-password'} value={password} onChange={e=>setPassword(e.target.value)}/></label><button className="btn" disabled={busy}>{busy?'Memproses…':register?'Buat akun':'Masuk'}</button></form>{message&&<p role="status">{message}</p>}<p className="small muted">Dengan melanjutkan, Anda menyetujui <a href="/syarat">Syarat & Ketentuan</a> dan <a href="/privasi">Kebijakan Privasi</a>.</p></div>;
+}
