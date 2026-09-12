@@ -1,4 +1,5 @@
 import { authServer } from '@/lib/auth/server';
+import { portalRequest, liveProducts, referralCampaign, customerDetails } from '@/lib/portal';
 import postgres from 'postgres';
 import { products } from '@/lib/catalog';
 import { BusinessError, validAddress, priceCart } from '@/lib/commerce';
@@ -201,7 +202,7 @@ async function handle(req: Request) {
   let body: any = {};
   if (isPost) {
     const text = await req.text();
-    if (text.length > 20000)
+    if (text.length > (path.join('/')==='portal/customer/profile'?420000:20000))
       throw new BusinessError('Request terlalu besar.', 413);
     try {
       body = JSON.parse(text);
@@ -210,10 +211,13 @@ async function handle(req: Request) {
     }
   }
   const rpath = path.join('/');
+  if(path[0]==='portal')return respond(await portalRequest(req,path,body));
+  if(['admin','marketing','sales'].includes(path[0]))throw new BusinessError('Gunakan portal terbaru di /myshop atau /sales.',410);
+  const products=await liveProducts();
   if (rpath === 'auth/demo' || rpath === 'auth/demo-role' || path.includes('simulate-payment')) throw new BusinessError('Layanan tidak tersedia.', 410);
   const auth = await authServer();
   const { data: { user } } = await auth.auth.getUser();
-  const staffRole = user?.email_confirmed_at && user.email?.toLowerCase() === 'klikfiber@gmail.com' ? 'owner' : user?.app_metadata?.staffRole;
+  const staffRole = undefined;
   const session = user ? { id: user.id, profile: JSON.stringify({id:user.id,name:user.user_metadata?.full_name || user.email?.split('@')[0] || 'Pelanggan',email:user.email,staffRole}) } : null;
   if (path[0] === 'products')
     return respond(
@@ -261,7 +265,8 @@ async function handle(req: Request) {
       profile.name = str(body.name, 2, 100);
       const {error} = await auth.auth.updateUser({data:{full_name:profile.name}}); if(error)throw new BusinessError('Profil belum dapat diperbarui.',400);
     }
-    return respond(profile);
+    const details=await customerDetails(owner);
+    return respond({...profile,...details,name:details.name||profile.name});
   }
   if (r === 'addresses') {
     if (isPost) {
@@ -287,6 +292,8 @@ async function handle(req: Request) {
       } catch {}
     }
   if (r === 'checkout/quote' && isPost) {
+    const customer=await customerDetails(owner);
+    if(!customer.profileComplete||!customer.hasAddress)throw new BusinessError('Lengkapi profil dan alamat sebelum checkout.',403);
     const address = validAddress(body.address);
     if (address.city.toLowerCase() === 'tidak terlayani')
       throw new BusinessError(
@@ -297,14 +304,11 @@ async function handle(req: Request) {
       .trim()
       .toUpperCase();
     const campaign = code
-      ? await db()
-          .prepare('SELECT * FROM campaigns WHERE owner=? AND code=?')
-          .bind(owner, code)
-          .first()
+      ? await referralCampaign(code)
       : null;
     if (code && !campaign)
       throw new BusinessError('Kode promo tidak ditemukan.');
-    const totals = priceCart(body.items, body.shipping, campaign);
+    const totals = priceCart(body.items, body.shipping, campaign, products);
     const apiKey = process.env.BITESHIP_API_KEY;
     if (!apiKey) throw new BusinessError('Koneksi tarif Biteship belum diaktifkan.', 503);
     const rateResponse = await fetch('https://api.biteship.com/v1/rates/couriers', {
@@ -326,7 +330,7 @@ async function handle(req: Request) {
         )
         .bind(owner, p.id)
         .first<any>();
-      if (!stock || stock.available < p.qty)
+      if ((products.find(x=>x.id===p.id)?.stock || 0) < p.qty)
         throw new BusinessError('Stok ' + p.name + ' tidak mencukupi.', 409);
     }
     const q = {
@@ -505,6 +509,9 @@ async function handle(req: Request) {
   }
   if (r === 'quotes') {
     if (!isPost) return respond(await records(owner, 'rfq'));
+    const referralCode=String(body.referralCode||'').trim().toUpperCase();
+    const referral=referralCode?await referralCampaign(referralCode):null;
+    if(referralCode&&!referral)throw new BusinessError('Kode referral tidak aktif atau belum disetujui.');
     const q = {
       id: id(),
       number: 'RFQ-' + id().slice(0, 8).toUpperCase(),
@@ -514,7 +521,10 @@ async function handle(req: Request) {
       phone: str(body.phone, 9, 16),
       city: str(body.city, 2, 100),
       requirements: str(body.requirements, 10, 3000),
-      referralCode: typeof body.referralCode === 'string' ? body.referralCode.trim().toUpperCase().slice(0, 20) : '',
+      referralCode,
+      salesId:referral?.salesId||null,
+      referralPercent:referral?.percent||0,
+      referralCap:referral?.cap||0,
       status: 'submitted',
       version: 0,
       createdAt: now(),

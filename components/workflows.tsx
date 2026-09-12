@@ -67,6 +67,7 @@ import {
 } from './store';
 import { products, rupiah, shipping } from '@/lib/catalog';
 import CustomerAuth from './customer-auth';
+import CustomerAvatar from './customer-avatar';
 export const office =
   'Jalan Mayor Madmuin Hasibuan. 4B RT.003/024, Margahayu, Kec. Bekasi Tim., Kota Bks, Jawa Barat 17113';
 const date = (d: string) =>
@@ -186,6 +187,7 @@ function AddressFields({
   );
 }
 export function Checkout({ paymentId }: { paymentId?: string }) {
+  const {products}=useStore();
   const s = useStore();
   const router = useRouter();
   const path = usePathname();
@@ -201,11 +203,8 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
   const [order, setOrder] = useState<any>(null);
   const key = useRef('');
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('klikfiber-address');
-      if (saved) setAddress(JSON.parse(saved));
-    } catch {}
-  }, []);
+    if(s.profile)api('addresses').then(a=>{if(a.length)setAddress(a[0]);}).catch(()=>setError('Alamat belum dapat dimuat. Silakan coba lagi.'));
+  }, [s.profile]);
   useEffect(() => {
     if (paymentId)
       api('orders/' + paymentId)
@@ -531,6 +530,7 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
   );
 }
 function OrderView({ order, reload }: { order: any; reload: () => void }) {
+  const {products}=useStore();
   const s = useStore();
   const [ticket, setTicket] = useState(false);
   const [reason, setReason] = useState('');
@@ -696,8 +696,12 @@ function CustomerNavigation() {
  return <nav className="customer-navigation" aria-label="Pesanan dan akun"><Link href="/akun/ringkasan">Ringkasan</Link><Link href="/akun/pesanan">Pesanan Saya</Link><Link href="/akun/alamat">Alamat</Link><Link href="/akun/wishlist">Wishlist</Link><Link href="/akun/penawaran">Penawaran</Link></nav>;
 }
 export function Account() {
+  const {products}=useStore();
   const s = useStore();
   const path = usePathname();
+  const router=useRouter();
+  const [avatar,setAvatar]=useState('blue');
+  const [saving,setSaving]=useState(false);
   const [orders, setOrders] = useState<any[]>([]);
   const [quotes, setQuotes] = useState<any[]>([]);
   const [address, setAddress] = useState(initialAddress);
@@ -716,7 +720,8 @@ export function Account() {
       setOrders(o);
       setQuotes(q);
       if (a.length) setAddress(a[0]);
-      setName(s.profile?.name || 'Budi');
+      setName(s.profile?.name || '');
+      setAvatar(s.profile?.avatar || 'blue');
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -742,13 +747,13 @@ export function Account() {
       <div className="account-layout">
         <aside className="account-sidebar panel buyer-menu-card">
           <div className="account-avatar">
-            <UserRound />
+            <CustomerAvatar value={s.profile.avatar} name={s.profile.name}/>
             <strong>{s.profile?.name || 'Akun Saya'}</strong>
             <span>Pelanggan KLIKFIBER</span>
           </div>
           {links.map(([Icon, label, href]: any) => (
             <Link
-              href={href}
+              href={href+'#account-content'}
               key={href}
               className={path === href ? 'active' : ''}
             >
@@ -769,12 +774,13 @@ export function Account() {
             </button>
           )}
         </aside>
-        <div className="account-content">
+        <div className="account-content" id="account-content" tabIndex={-1}>
+          {(!s.profile.profileComplete||!s.profile.hasAddress)&&<section className="onboarding-note"><strong>Siapkan akun, belanja jadi gampang.</strong><p>1. Lengkapi profil {s.profile.profileComplete?'✓':''} · 2. Simpan alamat {s.profile.hasAddress?'✓':''}</p><Link href={s.profile.profileComplete?'/akun/alamat':'/akun/profil'}>Lanjutkan pengisian →</Link></section>}
           {path === '/akun/wishlist' ? (
             <>
               <SectionHead
                 title="Wishlist Saya"
-                sub="Produk pilihan Anda, tersimpan di browser ini."
+                sub="Produk pilihanmu, tersimpan di akun ini."
               />
               <div className="product-grid catalog-grid">
                 {products
@@ -897,6 +903,8 @@ export function Account() {
                         JSON.stringify(address),
                       );
                       notify('Alamat disimpan');
+                      await s.refresh();
+                      router.push('/keranjang');
                     } catch (e: any) {
                       notify(e.message, 'error');
                     }
@@ -912,14 +920,20 @@ export function Account() {
                   onSubmit={async (e) => {
                     e.preventDefault();
                     try {
-                      await api('me', { name });
+                      setSaving(true);
+                      await api('portal/customer/profile', { name,avatar });
                       await s.refresh();
                       notify('Profil diperbarui');
+                      if(!s.profile.hasAddress)router.push('/akun/alamat');
                     } catch (e: any) {
                       notify(e.message, 'error');
+                    } finally {
+                      setSaving(false);
                     }
                   }}
                 >
+                  <div className="profile-avatar-edit"><CustomerAvatar value={avatar} name={name}/><div><h3>Pilih teman koneksimu</h3><div className="avatar-options">{['blue','orange','mint','purple'].map(v=><button type="button" key={v} aria-label={`Pilih avatar ${v}`} aria-pressed={avatar===v} onClick={()=>setAvatar(v)}><CustomerAvatar value={v}/></button>)}</div></div></div>
+                  <label>Ganti dengan foto<input type="file" accept="image/png,image/jpeg,image/webp" onChange={async e=>{const file=e.target.files?.[0];if(!file)return;if(file.size>5000000){notify('Pilih foto maksimal 5 MB.','error');return;}try{const bitmap=await createImageBitmap(file);const canvas=document.createElement('canvas');canvas.width=256;canvas.height=256;const context=canvas.getContext('2d')!;const size=Math.min(bitmap.width,bitmap.height);context.drawImage(bitmap,(bitmap.width-size)/2,(bitmap.height-size)/2,size,size,0,0,256,256);bitmap.close();setAvatar(canvas.toDataURL('image/webp',.8));}catch{notify('Foto tidak dapat dibaca. Gunakan JPG, PNG atau WebP.','error');}}}/></label>
                   <label>
                     Nama tampilan
                     <input
@@ -934,7 +948,7 @@ export function Account() {
                     Akun pelanggan · Data tersimpan di server dan terikat
                     sesi browser.
                   </p>
-                  <Btn type="submit">Simpan Profil</Btn>
+                  <Btn type="submit" disabled={saving}>{saving?'Menyimpan…':!s.profile.hasAddress?'Simpan & lanjut ke alamat':'Simpan Profil'}</Btn>
                 </form>
               )}
               {path === '/akun/penawaran' && (
@@ -1007,6 +1021,7 @@ export function Account() {
   );
 }
 export function QuoteForm() {
+  const {products}=useStore();
   const s = useStore();
   const params = useSearchParams();
   const p = products.find((p) => p.id === params.get('produk'));

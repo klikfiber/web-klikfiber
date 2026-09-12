@@ -10,6 +10,7 @@ import {
 import Link from 'next/link';
 import Image from 'next/image';
 import CustomerAuth from './customer-auth';
+import {AdminPortal,SalesArea} from './portals';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowRight,
@@ -86,6 +87,7 @@ export async function api(path: string, body?: unknown) {
 export const notify = (title: string, type = 'success') =>
   toast.add({ title, type });
 export type State = {
+  products: Product[];
   cart: CartItem[];
   favorites: string[];
   profile: any;
@@ -339,6 +341,7 @@ export function Benefits() {
   );
 }
 function Home() {
+ const {products}=useStore();
  const [bannerIndex,setBannerIndex]=useState(0);
  const bannerRef=useRef<HTMLDivElement>(null);
  const banners=[
@@ -449,6 +452,7 @@ function Home() {
   );
 }
 function Catalog() {
+  const {products}=useStore();
   const query = useSearchParams();
   const [category, setCategory] = useState(
     query.get('kategori') || categories[0],
@@ -643,6 +647,7 @@ function Catalog() {
   );
 }
 function Detail({ id }: { id: string }) {
+  const {products}=useStore();
   const p = products.find((p) => p.id === id);
   const s = useStore();
   const router = useRouter();
@@ -831,6 +836,8 @@ function Detail({ id }: { id: string }) {
   );
 }
 export default function Store() {
+  const [catalog,setCatalog]=useState<Product[]>(products);
+  const router=useRouter();
   const path = usePathname();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [favorites, setFavorites] = useState<string[]>([]);
@@ -840,6 +847,7 @@ export default function Store() {
   const [menu, setMenu] = useState(false);
   const [search, setSearch] = useState('');
   const [busy, setBusy] = useState(false);
+  useEffect(()=>{if(profile&&['/akun','/checkout','/keranjang'].includes(path)&&(!profile.profileComplete||!profile.hasAddress))router.replace(profile.profileComplete?'/akun/alamat':'/akun/profil');},[profile,path,router]);
   useEffect(() => {
     try {
       const c = JSON.parse(localStorage.getItem('klikfiber-cart') || '[]');
@@ -870,13 +878,18 @@ export default function Store() {
     setMenu(false);
   }, [path]);
   async function refresh() {
+    try {setCatalog(await api('products'));}catch{}
     try {
-      setProfile(await api('me'));
+      const current=await api('me');
+      setProfile(current);
+      setFavorites(await api('portal/customer/favorites').catch(()=>[]));
+      if(!current.profileComplete&&!['/myshop','/admin','/marketing','/sales','/akun/profil'].some(p=>path.startsWith(p)))router.replace('/akun/profil');
     } catch {
       setProfile(null);
     }
   }
   const state: State = {
+    products:catalog,
     cart,
     favorites,
     profile,
@@ -890,6 +903,7 @@ export default function Store() {
         notify('Masuk atau daftar untuk menambahkan produk', 'info');
         return;
       }
+      if(!profile.profileComplete||!profile.hasAddress){router.push(profile.profileComplete?'/akun/alamat':'/akun/profil');notify('Lengkapi profil dan alamat sebelum belanja.','info');return;}
       if (!p.stock || p.quote) return;
       setCart((c) => {
         const previous = c.find((x) => x.id === p.id)?.qty || 0;
@@ -920,10 +934,12 @@ export default function Store() {
                 : x,
             ),
       ),
-    favorite: (id) =>
-      setFavorites((f) =>
-        f.includes(id) ? f.filter((x) => x !== id) : [...f, id],
-      ),
+    favorite: (id) => {
+      if(!profile){setLoginOpen(true);return;}
+      const next=favorites.includes(id)?favorites.filter(x=>x!==id):[...favorites,id];
+      setFavorites(next);
+      api('portal/customer/favorites',{ids:next}).catch(()=>{setFavorites(favorites);notify('Wishlist belum tersimpan. Coba lagi.','error');});
+    },
   };
   const count = cart.reduce((n, x) => n + x.qty, 0);
   return (
@@ -1010,9 +1026,9 @@ export default function Store() {
           ) : path.startsWith('/akun') ? (
             <Account />
           ) : path.startsWith('/myshop') || path.startsWith('/admin') || path.startsWith('/marketing') ? (
-            <Backoffice />
+            <AdminPortal />
           ) : path.startsWith('/sales') ? (
-            <SalesPortal />
+            <SalesArea />
           ) : path === '/penawaran' ? (
             <QuoteForm />
           ) : (

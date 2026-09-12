@@ -44,12 +44,13 @@ export function priceCart(
   items: CartItem[],
   shippingId: string,
   campaign?: any,
+  catalog = products,
 ) {
   if (!Array.isArray(items) || !items.length || items.length > 100)
     throw new BusinessError('Keranjang kosong atau tidak valid.');
   const seen = new Set();
   const snapshot = items.map((item) => {
-    const p = products.find((p) => p.id === item.id);
+    const p = catalog.find((p) => p.id === item.id);
     if (!p || p.quote || !p.stock)
       throw new BusinessError(
         'Produk tidak dapat dibeli langsung. Gunakan penawaran proyek.',

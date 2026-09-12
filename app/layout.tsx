@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import './playful.css';
+import './portals.css';
 export const metadata: Metadata = {
   title: 'Klikfiber.id — Klik, sambung, beres!',
   description:
