@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import './playful.css';
 export const metadata: Metadata = {
-  title: 'Klikfiber.id — Connecting a Stronger Tomorrow',
+  title: 'Klikfiber.id — Klik, sambung, beres!',
   description:
     'Perangkat, aksesori, dan solusi fiber optik untuk teknisi, ISP, dan proyek Anda.',
   robots: { index: false, follow: false },

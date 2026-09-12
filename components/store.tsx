@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import CustomerAuth from './customer-auth';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -101,7 +102,7 @@ export const useStore = () => useContext(Context);
 export function Logo() {
   return (
     <Link className="logo" href="/" aria-label="KLIKFIBER beranda">
-      <img src="/images/klikfiber-brand.png" alt="Klikfiber.id — Connecting a stronger tomorrow" width={2172} height={724} />
+      <img src="/images/klikfiber-playful.png" alt="klikfiber.id — Klik, sambung, beres!" width={3200} height={1600} />
     </Link>
   );
 }
@@ -338,18 +339,32 @@ export function Benefits() {
   );
 }
 function Home() {
+ const [bannerIndex,setBannerIndex]=useState(0);
+ const bannerRef=useRef<HTMLDivElement>(null);
+ const banners=[
+  {image:'cable',tag:'HALO, SOBAT KONEKSI!',title:'Klik, sambung,',accent:'beres!',text:'Cari kebutuhan fiber? Semua kumpul di sini.',cta:'Yuk, cari produk',href:'/produk',sticker:'Good connections. Good vibes.'},
+  {image:'tools',tag:'TEMAN KERJA ANDALAN',title:'Siap ngegas',accent:'di lapangan.',text:'Splicer dan alat kerja buat proyek berikutnya.',cta:'Lihat peralatannya',href:'/produk?kategori=Fusion%20Splicer',sticker:'Ready, set, connect!'},
+  {image:'connect',tag:'KECIL-KECIL, PENTING!',title:'Beda ujung,',accent:'tetap nyambung.',text:'Lengkapi koneksi dari kabel sampai konektor.',cta:'Cari pelengkapnya',href:'/produk',sticker:'Let’s connect!'},
+  {image:'project',tag:'PROYEK BESAR? GAS BARENG.',title:'Ide besar?',accent:'Gas bareng.',text:'Cari perangkat buat proyekmu, bareng kami.',cta:'Ngobrolin proyek',href:'/penawaran',sticker:'Big ideas welcome.'},
+ ];
  const [categoryPaused,setCategoryPaused]=useState(false);
  const categoryRef=useRef<HTMLDivElement>(null);
  useEffect(()=>{if(categoryPaused || matchMedia('(prefers-reduced-motion: reduce)').matches)return;const timer=setInterval(()=>{const el=categoryRef.current;if(el)el.scrollTo({left:el.scrollLeft+130>=el.scrollWidth-el.clientWidth?0:el.scrollLeft+130,behavior:'smooth'});},3500);return()=>clearInterval(timer);},[categoryPaused]);
  return (<>
-      <section className="image-banner" aria-label="Pilihan perangkat KLIKFIBER">
-        <div className="banner-track">{['Kabel fiber optik','Fusion splicer','Patch panel','Peralatan instalasi'].map((label,i)=><Link href="/produk" key={label} className="banner-slide" aria-label={label}><img src={i===0 ? "/images/hero-datacenter.png" : `/images/banner-${i+1}.png`} alt={label} loading={i===0?'eager':'lazy'}/></Link>)}</div>
-        <div className="banner-caption"><span className="brand-eyebrow">CONNECTING A STRONGER TOMORROW</span><h1>Infrastruktur andal.<br/>Koneksi tanpa batas.</h1><Link href="/produk">Jelajahi Produk <ArrowRight size={17}/></Link></div>
+      <section className="play-hero" aria-label="Inspirasi koneksi" aria-roledescription="carousel">
+        <div className="play-track" ref={bannerRef} onScroll={()=>{const el=bannerRef.current;if(el)setBannerIndex(Math.round(el.scrollLeft/el.clientWidth));}}>
+          {banners.map((b,i)=><article className={'play-slide play-'+b.image} key={b.image} aria-label={`${i+1} dari 4`} aria-roledescription="slide">
+            <Image className="play-art" src={`/images/play-${b.image}.png`} alt="" width={1536} height={1024} sizes="(max-width:767px) 100vw, 850px" priority={i===0}/>
+            <div className="play-copy"><span className="play-tag">✳ {b.tag}</span>{i===0?<h1>{b.title}<br/><em>{b.accent}</em></h1>:<h2>{b.title}<br/><em>{b.accent}</em></h2>}<p>{b.text}</p><Link className="play-cta" href={b.href}>{b.cta}<ArrowUpRight size={20}/></Link></div>
+            <span className="play-sticker">{b.sticker}</span>
+          </article>)}
+        </div>
+        <div className="play-pagination"><span>Geser, temukan yang cocok <ArrowRight size={14}/></span><div>{banners.map((b,i)=><button key={b.image} aria-label={`Lihat banner ${i+1}`} aria-pressed={bannerIndex===i} onClick={()=>bannerRef.current?.scrollTo({left:i*bannerRef.current.clientWidth,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'})}/>)}</div></div>
       </section>      <div className="container">
         <section className="section">
           <SectionHead
-            title="Temukan kebutuhan Anda"
-            sub="Dari sambungan pertama hingga jaringan yang lebih luas."
+            title="Lagi cari apa, nih?"
+            sub="Pilih kategori, langsung ketemu."
             href="/produk"
             label="Semua kategori"
           />
@@ -377,8 +392,8 @@ function Home() {
         </section>
         <section className="section">
           <SectionHead
-            title="Peralatan andalan, siap bekerja"
-            sub="Pilihan perangkat untuk mendukung pekerjaan Anda."
+            title="Kenalan sama jagoannya"
+            sub="Perangkat pilihan buat teman kerja kamu."
             href="/produk"
           />
           <div className="product-grid home-grid">
@@ -389,19 +404,18 @@ function Home() {
         </section>
         <section className="b2b">
           <div>
-            <span className="kicker">UNTUK BISNIS & PROYEK ANDA</span>
+            <span className="kicker">PROYEKMU, KITA BANTUIN.</span>
             <h2>
-              Proyek lebih besar.
+              Punya proyek seru?
               <br />
-              Pengadaan lebih mudah.
+              Yuk, beresin bareng.
             </h2>
             <p>
-              Konsultasikan daftar kebutuhan Anda. Dapatkan penawaran
-              <br className="desktop" /> yang sesuai untuk perusahaan, ISP, dan
-              integrator.
+              Dari daftar belanja sampai pilihan perangkat,
+              <br className="desktop" /> tim kami siap jadi teman diskusi kamu.
             </p>
             <Btn href="/penawaran">
-              Minta Penawaran B2B <ArrowUpRight size={18} />
+              Yuk, ngobrol dulu <ArrowUpRight size={18} />
             </Btn>
           </div>
           <div className="b2b-features">
@@ -420,8 +434,8 @@ function Home() {
         </section>
         <section className="section">
           <SectionHead
-            title="Lengkapi instalasi Anda"
-            sub="Komponen kecil yang membuat koneksi lebih baik."
+            title="Jangan lupa si kecil ini"
+            sub="Pelengkap instalasi biar makin komplit."
             href="/produk"
           />
           <div className="product-grid home-grid">
@@ -1012,11 +1026,11 @@ export default function Store() {
               <p>
                 PT KARYA FABEAL SUKSES
                 <br />
-                Menghubungkan kebutuhan.
+                Klik, sambung, beres!
                 <br />
-                Membangun masa depan.
+                Teman belanja kebutuhan koneksi.
               </p>
-              <div className="footer-tag">Koneksi untuk Indonesia.</div>
+              <div className="footer-tag">Dari satu klik, jadi banyak koneksi.</div>
             </div>
             {[
               [
