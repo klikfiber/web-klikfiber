@@ -631,7 +631,7 @@ export function SalesArea() {
               onClick={async () => {
                 try {
                   await navigator.clipboard.writeText(
-                    `${location.origin}/penawaran?ref=${profile.code}`,
+                    `${location.origin}/produk?ref=${profile.code}`,
                   );
                   setNotice('Tautan referral berhasil disalin.');
                 } catch {

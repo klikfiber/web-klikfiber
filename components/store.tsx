@@ -839,6 +839,7 @@ export default function Store() {
   const [catalog,setCatalog]=useState<Product[]>(products);
   const router=useRouter();
   const path = usePathname();
+  const query = useSearchParams();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [profile, setProfile] = useState<any>(null);
@@ -847,6 +848,10 @@ export default function Store() {
   const [menu, setMenu] = useState(false);
   const [search, setSearch] = useState('');
   const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    const referral = (query.get('ref') || '').trim().toUpperCase();
+    if (/^[A-Z0-9-]{4,24}$/.test(referral)) localStorage.setItem('klikfiber-referral', referral);
+  }, [query]);
   useEffect(() => {
     try {
       const c = JSON.parse(localStorage.getItem('klikfiber-cart') || '[]');
@@ -1089,6 +1094,21 @@ export default function Store() {
             </span>
           </div>
         </footer>
+        {path !== '/' && !['/myshop','/admin','/marketing','/sales'].some(prefix => path.startsWith(prefix)) && (
+          <nav className="desktop-quick-nav desktop" aria-label="Navigasi cepat desktop">
+            {[
+              [Grid2X2, 'Beranda', '/'],
+              [Cable, 'Produk', '/produk'],
+              [ShoppingCart, 'Keranjang', '/keranjang'],
+              [UserRound, 'Akun', '/akun'],
+            ].map(([Icon, label, url]: any) => (
+              <Link key={url} href={url} className={(url === '/' ? path === '/' : path.startsWith(url)) ? 'active' : ''} aria-label={label} title={label}>
+                <span><Icon size={20}/>{url === '/keranjang' && count > 0 && <b>{count > 99 ? '99+' : count}</b>}</span>
+                {label}
+              </Link>
+            ))}
+          </nav>
+        )}
         <nav className="bottom-nav mobile" aria-label="Navigasi utama mobile">
           {[
             [Grid2X2, 'Beranda', '/'],

@@ -291,6 +291,15 @@ async function handle(req: Request) {
         await release(owner, o, 'expired');
       } catch {}
     }
+  if (r === 'referrals/validate' && isPost) {
+    const code = String(body.code || '').trim().toUpperCase();
+    if (!code)
+      throw new BusinessError('Masukkan kode referral sales.');
+    const campaign = await referralCampaign(code);
+    if (!campaign)
+      throw new BusinessError('Kode referral sales tidak valid atau belum aktif.');
+    return respond({ code, name: campaign.name, percent: campaign.percent, cap: campaign.cap });
+  }
   if (r === 'checkout/quote' && isPost) {
     const address = validAddress(body.address);
     if (address.city.toLowerCase() === 'tidak terlayani')
@@ -301,11 +310,13 @@ async function handle(req: Request) {
     const code = String(body.code || '')
       .trim()
       .toUpperCase();
+    if (!code)
+      throw new BusinessError('Masukkan kode referral sales untuk melanjutkan checkout.');
     const campaign = code
       ? await referralCampaign(code)
       : null;
-    if (code && !campaign)
-      throw new BusinessError('Kode promo tidak ditemukan.');
+    if (!campaign)
+      throw new BusinessError('Kode referral sales tidak valid atau belum aktif.');
     const totals = priceCart(body.items, body.shipping, campaign, products);
     const apiKey = process.env.BITESHIP_API_KEY;
     if (!apiKey) throw new BusinessError('Koneksi tarif Biteship belum diaktifkan.', 503);

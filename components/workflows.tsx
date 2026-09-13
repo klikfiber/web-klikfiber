@@ -2,6 +2,8 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { createBrowserClient } from '@supabase/ssr';
+import { authUrl, authKey } from '@/lib/auth/config';
 import {
   ArrowRight,
   ChevronRight,
@@ -207,6 +209,10 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
     if(s.profile)api('addresses').then(a=>{if(a.length)setAddress(a[0]);}).catch(()=>setError('Alamat belum dapat dimuat. Silakan coba lagi.'));
   }, [s.profile]);
   useEffect(() => {
+    const saved = localStorage.getItem('klikfiber-referral') || '';
+    if (saved) setCode(saved);
+  }, []);
+  useEffect(() => {
     if (paymentId)
       api('orders/' + paymentId)
         .then(setOrder)
@@ -220,7 +226,7 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
     (n, item) => n + products.find((p) => p.id === item.id)!.price * item.qty,
     0,
   );
-  async function getQuote(promo = applied) {
+  async function getQuote(promo = code.trim().toUpperCase() || applied) {
     setError('');
     setBusy(true);
     try {
@@ -231,6 +237,7 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
         code: promo,
       });
       setQuote(q);
+      setApplied(promo);
       if (q.selectedShipping?.id) setShip(q.selectedShipping.id);
       return q;
     } catch (e: any) {
@@ -308,6 +315,43 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
               ← Lanjut belanja
             </Link>
           </section>
+          <section className="panel promo-box referral-box">
+            <Gift />
+            <div>
+              <h3>Kode referral sales <b>Wajib</b></h3>
+              <p>Masukkan kode dari sales KLIKFIBER untuk mendapatkan potongan harga.</p>
+            </div>
+            <input
+              aria-label="Kode referral sales"
+              aria-required="true"
+              required
+              value={code}
+              onChange={(e) => { setCode(e.target.value.toUpperCase()); setQuote(null); setApplied(''); }}
+              placeholder="Contoh: KFS1234567"
+              maxLength={24}
+            />
+            <Btn
+              outline
+              disabled={busy || !code.trim()}
+              onClick={async () => {
+                setError('');
+                setBusy(true);
+                try {
+                  const result = await api('referrals/validate', { code });
+                  setCode(result.code);
+                  setApplied(result.code);
+                  localStorage.setItem('klikfiber-referral', result.code);
+                  notify(`Kode aktif · diskon ${result.percent}%`);
+                } catch (e: any) {
+                  setError(e.message);
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              Cek Kode
+            </Btn>
+          </section>
           {step >= 1 && (
             <section className="panel">
               <h2 className="icon-heading">
@@ -341,7 +385,6 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
                     onChange={(v) => {
                       setAddress(v);
                       setQuote(null);
-                      router.push('/checkout');
                     }}
                   />
                   <Btn type="submit" outline disabled={busy}>
@@ -388,36 +431,6 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
               </RadioGroup>
             </section>
           )}
-          <section className="panel promo-box">
-            <Gift />
-            <div>
-              <h3>Punya kode promo?</h3>
-              <p>Masukkan kode promo yang Anda terima.</p>
-            </div>
-            <input
-              aria-label="Kode promo"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="Masukkan kode promo"
-              maxLength={24}
-            />
-            <Btn
-              outline
-              disabled={busy}
-              onClick={async () => {
-                const normalized = code.trim().toUpperCase();
-                const q = await getQuote(normalized);
-                if (q) {
-                  setApplied(normalized);
-                  notify(
-                    normalized ? 'Kode promo diterapkan' : 'Kode promo dihapus',
-                  );
-                }
-              }}
-            >
-              Terapkan
-            </Btn>
-          </section>
         </div>
         <aside className="panel order-summary">
           <h2>Ringkasan Pesanan</h2>
@@ -435,7 +448,7 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
               </dd>
             </div>
             <div>
-              <dt>Diskon {applied && `(${applied})`}</dt>
+              <dt>Diskon referral {applied && `(${applied})`}</dt>
               <dd className="green">− {rupiah(quote?.discount ?? 0)}</dd>
             </div>
             <div>
@@ -513,17 +526,6 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
             <LockKeyhole />
             <strong>Belanja dengan tenang</strong>
             <p>Metode pembayaran ditampilkan setelah layanan pembayaran diaktifkan.</p>
-          </div>
-          <div className="summary-benefits">
-            <span>
-              <ShieldCheck /> Informasi garansi transparan
-            </span>
-            <span>
-              <Truck /> Pengiriman seluruh Indonesia
-            </span>
-            <span>
-              <FileText /> Invoice penjualan setelah dibayar
-            </span>
           </div>
         </aside>
       </div>
@@ -699,6 +701,7 @@ export function Account() {
   const path = usePathname();
   const [avatar,setAvatar]=useState('blue');
   const [saving,setSaving]=useState(false);
+  const [loggingOut,setLoggingOut]=useState(false);
   const [orders, setOrders] = useState<any[]>([]);
   const [quotes, setQuotes] = useState<any[]>([]);
   const [address, setAddress] = useState(initialAddress);
@@ -762,14 +765,24 @@ export function Account() {
           ))}
           {s.profile && (
             <button
+              type="button"
+              disabled={loggingOut}
               onClick={async () => {
-                await api('auth/logout', {});
-                await s.refresh();
-                notify('Anda telah keluar');
+                try {
+                  setLoggingOut(true);
+                  const { error } = await createBrowserClient(authUrl, authKey).auth.signOut();
+                  if (error) throw error;
+                  await s.refresh();
+                  notify('Anda telah keluar');
+                } catch {
+                  notify('Belum berhasil keluar. Silakan coba lagi.', 'error');
+                } finally {
+                  setLoggingOut(false);
+                }
               }}
             >
               <LogOut size={19} />
-              Keluar
+              {loggingOut ? 'Keluar…' : 'Keluar'}
             </button>
           )}
         </aside>
