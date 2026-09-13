@@ -11,6 +11,7 @@ import {
   Boxes,
   CircleDollarSign,
   ClipboardList,
+  ImageIcon,
   LayoutDashboard,
   LogOut,
   PackageSearch,
@@ -20,6 +21,105 @@ import {
   TrendingUp,
   UsersRound,
 } from 'lucide-react';
+
+const readImage = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    if (file.size > 4 * 1024 * 1024) {
+      reject(new Error('Ukuran gambar maksimal 4 MB.'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error('Gambar tidak dapat dibaca.'));
+    reader.readAsDataURL(file);
+  });
+
+function BannerManager({
+  banners,
+  busy,
+  onSave,
+}: {
+  banners: any[];
+  busy: boolean;
+  onSave: (banner: any) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState<any>(null);
+  const [fileError, setFileError] = useState('');
+  const pick = async (key: 'desktopImage' | 'mobileImage', file?: File) => {
+    if (!file) return;
+    setFileError('');
+    try {
+      const image = await readImage(file);
+      setDraft((current: any) => ({ ...current, [key]: image }));
+    } catch (error: any) {
+      setFileError(error.message);
+    }
+  };
+  return (
+    <section className="panel banner-manager">
+      <div className="portal-heading">
+        <div>
+          <h2>Banner homepage</h2>
+          <p>Dua banner aktif yang dapat digeser oleh pengunjung.</p>
+        </div>
+      </div>
+      <div className="banner-admin-grid">
+        {banners.map((banner, index) => (
+          <article className="banner-admin-card" key={banner.id}>
+            <div className="banner-admin-preview">
+              <img src={banner.desktopImage} alt="" />
+              <span>Banner {index + 1}</span>
+            </div>
+            <div>
+              <strong>{banner.title} {banner.accent}</strong>
+              <p>{banner.subtitle}</p>
+              <small>{banner.active ? 'Aktif di homepage' : 'Disembunyikan'}</small>
+            </div>
+            <button className="btn outline" onClick={() => setDraft({ ...banner })}>
+              Edit banner
+            </button>
+          </article>
+        ))}
+      </div>
+      {draft && (
+        <section className="panel portal-editor banner-editor" id="portal-editor" aria-label="Editor banner">
+          <div className="portal-heading">
+            <div><h2>Edit {draft.id === 'hero-1' ? 'banner 1' : 'banner 2'}</h2><p>Gambar otomatis dipotong ke ukuran yang tepat saat disimpan.</p></div>
+            <button className="btn outline" onClick={() => setDraft(null)}>Tutup</button>
+          </div>
+          <form className="stack" onSubmit={async (event) => {
+            event.preventDefault();
+            await onSave(draft);
+            setDraft(null);
+          }}>
+            <div className="banner-upload-grid">
+              <label className="banner-upload">
+                <span><strong>Versi desktop</strong><small>1600 × 640 px · rasio 5:2 · JPG, PNG, atau WebP</small></span>
+                <img src={draft.desktopImage} alt="Pratinjau banner desktop" />
+                <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void pick('desktopImage', event.target.files?.[0])} />
+              </label>
+              <label className="banner-upload mobile-preview">
+                <span><strong>Versi mobile</strong><small>800 × 900 px · rasio 8:9 · JPG, PNG, atau WebP</small></span>
+                <img src={draft.mobileImage} alt="Pratinjau banner mobile" />
+                <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void pick('mobileImage', event.target.files?.[0])} />
+              </label>
+            </div>
+            {fileError && <p className="error" role="alert">{fileError}</p>}
+            <div className="banner-copy-grid">
+              <label>Judul<input value={draft.title} maxLength={60} required onChange={(e) => setDraft({ ...draft, title: e.target.value })} /></label>
+              <label>Kata sorotan<input value={draft.accent} maxLength={40} required onChange={(e) => setDraft({ ...draft, accent: e.target.value })} /></label>
+              <label>Kalimat singkat<input value={draft.subtitle} maxLength={120} required onChange={(e) => setDraft({ ...draft, subtitle: e.target.value })} /></label>
+              <label>Teks tombol<input value={draft.cta} maxLength={40} required onChange={(e) => setDraft({ ...draft, cta: e.target.value })} /></label>
+              <label>Tujuan tombol<input value={draft.href} maxLength={200} required onChange={(e) => setDraft({ ...draft, href: e.target.value })} /></label>
+              <label className="banner-active"><input type="checkbox" checked={draft.active} onChange={(e) => setDraft({ ...draft, active: e.target.checked })} /> Tampilkan banner</label>
+            </div>
+            <button className="btn" disabled={busy || !!fileError}>{busy ? 'Menyimpan…' : 'Simpan dan tampilkan'}</button>
+          </form>
+        </section>
+      )}
+    </section>
+  );
+}
 
 const statusLabel: Record<string, string> = {
   pending: 'Menunggu persetujuan',
@@ -376,6 +476,7 @@ export function AdminPortal() {
   const navigation = [
     ['dashboard', 'Dashboard', LayoutDashboard],
     ['products', 'Produk', Boxes],
+    ['banners', 'Banner Homepage', ImageIcon],
     ['orders', 'Pesanan', ClipboardList],
     ['sales', 'Sales & Referral', UsersRound],
     ['promos', 'Voucher Promo', Tag],
@@ -383,6 +484,7 @@ export function AdminPortal() {
   const pageTitle: Record<string, [string, string]> = {
     dashboard: ['Dashboard', 'Pantau performa toko dan operasional terbaru.'],
     products: ['Produk', 'Kelola harga, stok, dan informasi katalog.'],
+    banners: ['Banner Homepage', 'Kelola dua banner desktop dan mobile.'],
     orders: ['Pesanan', 'Pantau transaksi pelanggan dari satu tempat.'],
     sales: ['Sales & Referral', 'Setujui sales dan atur batas diskonnya.'],
     promos: ['Voucher Promo', 'Kelola program promo untuk pelanggan.'],
@@ -551,6 +653,13 @@ export function AdminPortal() {
                   ))}
               </div>
             </section>
+          )}
+          {tab === 'banners' && (
+            <BannerManager
+              banners={data.banners || []}
+              busy={busy}
+              onSave={(banner) => action('banner', banner)}
+            />
           )}
           {tab === 'orders' && (
             <section className="admin-card orders-page-card">

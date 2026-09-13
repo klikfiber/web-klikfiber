@@ -346,25 +346,24 @@ function Home() {
  const {products}=useStore();
  const [bannerIndex,setBannerIndex]=useState(0);
  const bannerRef=useRef<HTMLDivElement>(null);
- const banners=[
-  {image:'cable',tag:'HALO, SOBAT KONEKSI!',title:'Klik, sambung,',accent:'beres!',text:'Cari kebutuhan fiber? Semua kumpul di sini.',cta:'Yuk, cari produk',href:'/produk',sticker:'Good connections. Good vibes.'},
-  {image:'tools',tag:'TEMAN KERJA ANDALAN',title:'Siap ngegas',accent:'di lapangan.',text:'Splicer dan alat kerja buat proyek berikutnya.',cta:'Lihat peralatannya',href:'/produk?kategori=Fusion%20Splicer',sticker:'Ready, set, connect!'},
-  {image:'connect',tag:'KECIL-KECIL, PENTING!',title:'Beda ujung,',accent:'tetap nyambung.',text:'Lengkapi koneksi dari kabel sampai konektor.',cta:'Cari pelengkapnya',href:'/produk',sticker:'Let’s connect!'},
-  {image:'project',tag:'PROYEK BESAR? GAS BARENG.',title:'Ide besar?',accent:'Gas bareng.',text:'Cari perangkat buat proyekmu, bareng kami.',cta:'Ngobrolin proyek',href:'/penawaran',sticker:'Big ideas welcome.'},
+ const fallbackBanners=[
+  {id:'hero-1',title:'Klik, sambung,',accent:'beres!',subtitle:'Cari kebutuhan fiber? Semua kumpul di sini.',cta:'Yuk, cari produk',href:'/produk',desktopImage:'/images/play-cable.png',mobileImage:'/images/play-cable.png'},
+  {id:'hero-2',title:'Siap ngegas',accent:'di lapangan.',subtitle:'Splicer dan alat kerja untuk proyek berikutnya.',cta:'Lihat peralatannya',href:'/produk?kategori=Fusion%20Splicer',desktopImage:'/images/play-tools.png',mobileImage:'/images/play-tools.png'},
  ];
+ const [banners,setBanners]=useState<any[]>(fallbackBanners);
+ useEffect(()=>{void api('portal/banners').then((items)=>{if(items?.length)setBanners(items);}).catch(()=>undefined);},[]);
  const [categoryPaused,setCategoryPaused]=useState(false);
  const categoryRef=useRef<HTMLDivElement>(null);
  useEffect(()=>{if(categoryPaused || matchMedia('(prefers-reduced-motion: reduce)').matches)return;const timer=setInterval(()=>{const el=categoryRef.current;if(el)el.scrollTo({left:el.scrollLeft+130>=el.scrollWidth-el.clientWidth?0:el.scrollLeft+130,behavior:'smooth'});},3500);return()=>clearInterval(timer);},[categoryPaused]);
  return (<>
       <section className="play-hero" aria-label="Inspirasi koneksi" aria-roledescription="carousel">
         <div className="play-track" ref={bannerRef} onScroll={()=>{const el=bannerRef.current;if(el)setBannerIndex(Math.round(el.scrollLeft/el.clientWidth));}}>
-          {banners.map((b,i)=><article className={'play-slide play-'+b.image} key={b.image} aria-label={`${i+1} dari 4`} aria-roledescription="slide">
-            <Image className="play-art" src={`/images/play-${b.image}.png`} alt="" width={1536} height={1024} sizes="(max-width:767px) 100vw, 850px" priority={i===0}/>
-            <div className="play-copy"><span className="play-tag">✳ {b.tag}</span>{i===0?<h1>{b.title}<br/><em>{b.accent}</em></h1>:<h2>{b.title}<br/><em>{b.accent}</em></h2>}<p>{b.text}</p><Link className="play-cta" href={b.href}>{b.cta}<ArrowUpRight size={20}/></Link></div>
-            <span className="play-sticker">{b.sticker}</span>
+          {banners.map((b,i)=><article className="play-slide" key={b.id} aria-label={`${i+1} dari ${banners.length}`} aria-roledescription="slide">
+            <picture><source media="(max-width: 767px)" srcSet={b.mobileImage}/><img className="play-art" src={b.desktopImage} alt="" /></picture>
+            <div className="play-copy"><span className="play-tag">PILIHAN KLIKFIBER</span>{i===0?<h1>{b.title}<br/><em>{b.accent}</em></h1>:<h2>{b.title}<br/><em>{b.accent}</em></h2>}<p>{b.subtitle}</p><Link className="play-cta" href={b.href}>{b.cta}<ArrowUpRight size={20}/></Link></div>
           </article>)}
         </div>
-        <div className="play-pagination"><span>Geser, temukan yang cocok <ArrowRight size={14}/></span><div>{banners.map((b,i)=><button key={b.image} aria-label={`Lihat banner ${i+1}`} aria-pressed={bannerIndex===i} onClick={()=>bannerRef.current?.scrollTo({left:i*bannerRef.current.clientWidth,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'})}/>)}</div></div>
+          <div className="play-pagination"><span>Geser, temukan yang cocok <ArrowRight size={14}/></span><div>{banners.map((b,i)=><button key={b.id} aria-label={`Lihat banner ${i+1}`} aria-pressed={bannerIndex===i} onClick={()=>bannerRef.current?.scrollTo({left:i*bannerRef.current.clientWidth,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'})}/>)}</div></div>
       </section>      <div className="container">
         <section className="section">
           <SectionHead
@@ -375,13 +374,13 @@ function Home() {
           />
           <div className="category-grid" ref={categoryRef} onTouchStart={()=>setCategoryPaused(true)} onMouseEnter={()=>setCategoryPaused(true)} onMouseLeave={()=>setCategoryPaused(false)}>
             {[
-              [Cable, 3, 'Kabel Fiber Optik'],
-              [Zap, 4, 'Konektor & Adapter'],
-              [Grid2X2, 5, 'ODF & Patch Panel'],
-              [Package, 6, 'Closure & ODP'],
-              [Wrench, 7, 'Tools & Splicing'],
-              [SlidersHorizontal, 2, 'Alat Uji & Monitoring'],
-            ].map(([Icon, c, title]: any) => (
+              [Cable, 3, 'Kabel Fiber Optik', 'Tarik jaringan'],
+              [Zap, 4, 'Konektor & Adapter', 'Sambung cepat'],
+              [Grid2X2, 5, 'ODF & Patch Panel', 'Rapikan distribusi'],
+              [Package, 6, 'Closure & ODP', 'Lindungi sambungan'],
+              [Wrench, 7, 'Tools & Splicing', 'Siap instalasi'],
+              [SlidersHorizontal, 2, 'Alat Uji & Monitoring', 'Ukur & pastikan'],
+            ].map(([Icon, c, title, hint]: any) => (
               <Link
                 key={title}
                 href={'/produk?kategori=' + encodeURIComponent(categories[c])}
@@ -389,6 +388,7 @@ function Home() {
                 <span>
                   <Icon size={29} />
                 </span>
+                <small>{hint}</small>
                 <strong>{title}</strong>
                 <ChevronRight size={16} />
               </Link>
@@ -951,19 +951,7 @@ export default function Store() {
         <a href="#main" className="skip-link">
           Lewati ke konten
         </a>
-        {!['/myshop','/admin','/marketing','/sales'].some(prefix => path.startsWith(prefix)) && <><div className="topbar">
-          <div className="container">
-            <span>
-              <Truck size={14} /> Solusi fiber untuk Indonesia yang lebih
-              terhubung
-            </span>
-            <span>
-              
-              <Link href="/dukungan">Pusat Bantuan</Link>
-            </span>
-          </div>
-        </div>
-        <header className="header">
+        {!['/myshop','/admin','/marketing','/sales'].some(prefix => path.startsWith(prefix)) && <><header className="header">
           <div className="container header-main">
             <button
               className="icon-btn mobile menu-toggle"
@@ -1009,14 +997,10 @@ export default function Store() {
               Produk <ChevronDown size={14} />
             </Link>
             <Link href="/solusi">Solusi Proyek</Link>
-            <Link href="/dukungan">Dukungan</Link>
             <Link href="/tentang">Tentang Kami</Link>
             <Link className="nav-promo" href="/promo">
               <Gift size={16} /> Promo Pilihan
             </Link>
-            <span className="nav-help">
-              <Headset size={17} /> Siap bantu kebutuhan Anda
-            </span>
           </nav>
         </header></>}
         <div id="main">

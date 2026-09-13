@@ -43,6 +43,7 @@ export async function initPortal() {
       await tx`CREATE TABLE IF NOT EXISTS portal_products (id TEXT PRIMARY KEY, data JSONB NOT NULL)`;
       await tx`CREATE TABLE IF NOT EXISTS portal_sales (id TEXT PRIMARY KEY, email TEXT NOT NULL, name TEXT NOT NULL, phone TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', code TEXT UNIQUE, discount INT NOT NULL DEFAULT 0, max_discount INT NOT NULL DEFAULT 5, cap INT NOT NULL DEFAULT 300000, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), approved_at TIMESTAMPTZ)`;
       await tx`CREATE TABLE IF NOT EXISTS portal_promos (code TEXT PRIMARY KEY, name TEXT NOT NULL, percent INT NOT NULL, cap INT NOT NULL, active BOOLEAN NOT NULL DEFAULT true)`;
+      await tx`CREATE TABLE IF NOT EXISTS portal_banners (id TEXT PRIMARY KEY, title TEXT NOT NULL, accent TEXT NOT NULL, subtitle TEXT NOT NULL, cta TEXT NOT NULL, href TEXT NOT NULL, desktop_image TEXT NOT NULL, mobile_image TEXT NOT NULL, sort_order INT NOT NULL DEFAULT 0, active BOOLEAN NOT NULL DEFAULT true)`;
       await tx`CREATE TABLE IF NOT EXISTS portal_customers (id TEXT PRIMARY KEY, name TEXT NOT NULL, avatar TEXT NOT NULL DEFAULT 'blue', profile_complete BOOLEAN NOT NULL DEFAULT true)`;
       for (const table of [
         'portal_admin',
@@ -51,6 +52,7 @@ export async function initPortal() {
         'portal_products',
         'portal_sales',
         'portal_promos',
+        'portal_banners',
         'portal_customers',
         'records',
       ]) {
@@ -59,6 +61,10 @@ export async function initPortal() {
           `REVOKE ALL ON TABLE ${table} FROM anon, authenticated`,
         );
       }
+      await tx`INSERT INTO portal_banners(id,title,accent,subtitle,cta,href,desktop_image,mobile_image,sort_order,active) VALUES
+        ('hero-1','Klik, sambung,','beres!','Cari kebutuhan fiber? Semua kumpul di sini.','Yuk, cari produk','/produk','/images/play-cable.png','/images/play-cable.png',1,true),
+        ('hero-2','Siap ngegas','di lapangan.','Splicer dan alat kerja untuk proyek berikutnya.','Lihat peralatannya','/produk?kategori=Fusion%20Splicer','/images/play-tools.png','/images/play-tools.png',2,true)
+        ON CONFLICT(id) DO NOTHING`;
     })
     .catch((e) => {
       initialized = undefined;
@@ -152,6 +158,8 @@ export async function portalRequest(req: Request, path: string[], body: any) {
   await initPortal();
   const action = path.slice(1).join('/'),
     post = req.method === 'POST';
+  if (action === 'banners' && !post)
+    return sql`SELECT id,title,accent,subtitle,cta,href,desktop_image AS "desktopImage",mobile_image AS "mobileImage",sort_order AS "sortOrder" FROM portal_banners WHERE active=true ORDER BY sort_order,id`;
   if (action === 'admin/login' && post) {
     const email = String(body.email || '')
         .trim()
@@ -267,6 +275,8 @@ export async function portalRequest(req: Request, path: string[], body: any) {
         products: catalog,
         sales,
         promos: await sql`SELECT * FROM portal_promos ORDER BY code`,
+        banners:
+          await sql`SELECT id,title,accent,subtitle,cta,href,desktop_image AS "desktopImage",mobile_image AS "mobileImage",sort_order AS "sortOrder",active FROM portal_banners ORDER BY sort_order,id`,
         analytics: {
           totalRevenue: orders
             .filter(isPaid)
@@ -365,6 +375,32 @@ export async function portalRequest(req: Request, path: string[], body: any) {
         percent = num(body.percent, 1, 50),
         cap = num(body.cap, 1, 10000000);
       await sql`INSERT INTO portal_promos(code,name,percent,cap,active) VALUES(${code},${name},${percent},${cap},${body.active === true}) ON CONFLICT(code) DO UPDATE SET name=excluded.name,percent=excluded.percent,cap=excluded.cap,active=excluded.active`;
+      return { ok: true };
+    }
+    if (action === 'admin/banner' && post) {
+      const bannerId = text(body.id, 3, 40);
+      const existing = await sql`SELECT desktop_image,mobile_image FROM portal_banners WHERE id=${bannerId}`;
+      if (!existing.length) throw new BusinessError('Banner tidak ditemukan.', 404);
+      const processImage = async (value: unknown, width: number, height: number, fallback: string) => {
+        const image = String(value || fallback);
+        if (image.startsWith('/') || /^https:\/\//.test(image)) return image;
+        if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(image) || image.length > 6500000)
+          throw new BusinessError('Gunakan gambar PNG, JPG, atau WebP maksimal 4 MB.');
+        try {
+          const buffer = Buffer.from(image.split(',')[1], 'base64');
+          const result = await photoProcessor(buffer, { limitInputPixels: 30000000 })
+            .rotate()
+            .resize(width, height, { fit: 'cover' })
+            .webp({ quality: 82 })
+            .toBuffer();
+          return 'data:image/webp;base64,' + result.toString('base64');
+        } catch {
+          throw new BusinessError('Gambar banner tidak dapat diproses.');
+        }
+      };
+      const desktopImage = await processImage(body.desktopImage, 1600, 640, existing[0].desktop_image);
+      const mobileImage = await processImage(body.mobileImage, 800, 900, existing[0].mobile_image);
+      await sql`UPDATE portal_banners SET title=${text(body.title, 2, 60)},accent=${text(body.accent, 2, 40)},subtitle=${text(body.subtitle, 2, 120)},cta=${text(body.cta, 2, 40)},href=${text(body.href, 1, 200)},desktop_image=${desktopImage},mobile_image=${mobileImage},active=${body.active === true} WHERE id=${bannerId}`;
       return { ok: true };
     }
     if (action === 'admin/activity' && !post) {

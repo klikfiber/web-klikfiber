@@ -208,7 +208,12 @@ async function handle(req: Request) {
   let body: any = {};
   if (isPost) {
     const text = await req.text();
-    if (text.length > (path.join('/')==='portal/customer/profile'?420000:20000))
+    const maxRequestSize = path.join('/') === 'portal/customer/profile'
+      ? 420000
+      : path.join('/') === 'portal/admin/banner'
+        ? 12500000
+        : 20000;
+    if (text.length > maxRequestSize)
       throw new BusinessError('Request terlalu besar.', 413);
     try {
       body = JSON.parse(text);
