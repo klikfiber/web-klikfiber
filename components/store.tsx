@@ -1038,7 +1038,7 @@ export default function Store() {
             <Information page={path} />
           )}
         </div>
-        <footer className="footer">
+        {!['/myshop','/admin','/marketing'].some(prefix => path.startsWith(prefix)) && <footer className="footer">
           <div className="container footer-grid">
             <div>
               <Logo />
@@ -1095,7 +1095,7 @@ export default function Store() {
               <Link href="/privasi">Kebijakan Privasi</Link>
             </span>
           </div>
-        </footer>
+        </footer>}
         {path !== '/' && !['/myshop','/admin','/marketing','/sales'].some(prefix => path.startsWith(prefix)) && (
           <nav className="desktop-quick-nav desktop" aria-label="Navigasi cepat desktop">
             {[
@@ -1111,7 +1111,7 @@ export default function Store() {
             ))}
           </nav>
         )}
-        <nav className="bottom-nav mobile" aria-label="Navigasi utama mobile">
+        {!['/myshop','/admin','/marketing'].some(prefix => path.startsWith(prefix)) && <nav className="bottom-nav mobile" aria-label="Navigasi utama mobile">
           {[
             [Grid2X2, 'Beranda', '/'],
             [Cable, 'Produk', '/produk'],
@@ -1123,7 +1123,7 @@ export default function Store() {
               <span>{label}</span>
             </Link>
           ))}
-        </nav>
+        </nav>}
         <Sheet open={menu} onOpenChange={setMenu}>
           <SheetContent side="right" className="quick-menu">
             <SheetTitle>Jelajahi KLIKFIBER</SheetTitle>

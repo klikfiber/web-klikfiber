@@ -6,6 +6,20 @@ import { authUrl, authKey } from '@/lib/auth/config';
 import { api, useStore } from './store';
 import CustomerAuth from './customer-auth';
 import { rupiah } from '@/lib/catalog';
+import {
+  Bell,
+  Boxes,
+  CircleDollarSign,
+  ClipboardList,
+  LayoutDashboard,
+  LogOut,
+  PackageSearch,
+  Search,
+  ShoppingBag,
+  Tag,
+  TrendingUp,
+  UsersRound,
+} from 'lucide-react';
 
 const statusLabel: Record<string, string> = {
   pending: 'Menunggu persetujuan',
@@ -42,10 +56,209 @@ function Activity({ items }: { items: any[] }) {
   );
 }
 
+const orderStatus: Record<string, string> = {
+  awaiting_payment: 'Menunggu pembayaran',
+  confirmed: 'Dibayar',
+  processing: 'Diproses',
+  shipped: 'Dikirim',
+  completed: 'Selesai',
+  cancelled: 'Dibatalkan',
+  expired: 'Kedaluwarsa',
+};
+
+function RevenueChart({ daily }: { daily: any[] }) {
+  const values = daily.map((item) => Number(item.revenue || 0));
+  const max = Math.max(...values, 1);
+  const points = values.map((value, index) => ({
+    x: 36 + index * 94,
+    y: 174 - (value / max) * 128,
+  }));
+  const line = points.map((point) => `${point.x},${point.y}`).join(' ');
+  const area = `36,174 ${line} ${points.at(-1)?.x || 600},174`;
+  return (
+    <div className="admin-chart-wrap">
+      <svg
+        className="admin-chart"
+        viewBox="0 0 640 220"
+        role="img"
+        aria-label="Kurva omzet tujuh hari terakhir"
+      >
+        <defs>
+          <linearGradient id="revenueFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#ff8a1f" stopOpacity=".28" />
+            <stop offset="1" stopColor="#ff8a1f" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {[46, 88, 130, 174].map((y) => (
+          <line key={y} x1="36" x2="600" y1={y} y2={y} className="chart-grid" />
+        ))}
+        <polygon points={area} fill="url(#revenueFill)" />
+        <polyline points={line} className="chart-line" />
+        {points.map((point, index) => (
+          <g key={daily[index].date}>
+            <circle cx={point.x} cy={point.y} r="5" className="chart-dot" />
+            <text x={point.x} y="205" textAnchor="middle">
+              {daily[index].label}
+            </text>
+          </g>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+function OrdersTable({ orders }: { orders: any[] }) {
+  if (!orders.length)
+    return (
+      <div className="admin-empty">
+        <PackageSearch size={34} />
+        <strong>Belum ada pesanan</strong>
+        <span>Pesanan baru akan muncul otomatis di sini.</span>
+      </div>
+    );
+  return (
+    <div className="admin-order-list">
+      {orders.map((order) => (
+        <article key={order.id}>
+          <div className="order-icon">
+            <ShoppingBag size={19} />
+          </div>
+          <div className="order-main">
+            <strong>{order.number}</strong>
+            <span>
+              {order.name} · {order.itemCount} item
+            </span>
+          </div>
+          <div className="order-value">
+            <strong>{rupiah(order.total)}</strong>
+            <span className={`order-status status-${order.status}`}>
+              {orderStatus[order.status] || order.status}
+            </span>
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function AdminOverview({ data }: { data: any }) {
+  const a = data.analytics;
+  const metric = [
+    [
+      'Total omzet',
+      rupiah(a.totalRevenue),
+      'Transaksi lunas',
+      CircleDollarSign,
+    ],
+    ['Total pesanan', a.totalOrders, 'Semua pesanan', ClipboardList],
+    ['Pesanan hari ini', a.todayOrders, 'Data hari ini', ShoppingBag],
+    ['Menunggu bayar', a.awaitingPayment, 'Perlu ditindaklanjuti', Bell],
+  ];
+  return (
+    <>
+      <section className="admin-metrics" aria-label="Ringkasan toko">
+        {metric.map(([label, value, hint, Icon]: any) => (
+          <article key={label}>
+            <div className="metric-icon">
+              <Icon size={21} />
+            </div>
+            <span>{label}</span>
+            <strong>{value}</strong>
+            <small>{hint}</small>
+          </article>
+        ))}
+      </section>
+      <div className="admin-overview-grid">
+        <section className="admin-card revenue-card">
+          <header>
+            <div>
+              <span className="admin-eyebrow">PERFORMA TOKO</span>
+              <h2>Ringkasan penjualan</h2>
+              <p>Omzet transaksi lunas selama tujuh hari terakhir.</p>
+            </div>
+            <span className="live-pill">
+              <i /> Realtime · 7 hari
+            </span>
+          </header>
+          <div className="chart-summary">
+            <div>
+              <span>Omzet 7 hari</span>
+              <strong>
+                {rupiah(
+                  a.daily.reduce((sum: number, d: any) => sum + d.revenue, 0),
+                )}
+              </strong>
+            </div>
+            <div>
+              <span>Pesanan 7 hari</span>
+              <strong>
+                {a.daily.reduce((sum: number, d: any) => sum + d.orders, 0)}
+              </strong>
+            </div>
+            <div>
+              <span>Rata-rata harian</span>
+              <strong>
+                {rupiah(
+                  Math.round(
+                    a.daily.reduce(
+                      (sum: number, d: any) => sum + d.revenue,
+                      0,
+                    ) / 7,
+                  ),
+                )}
+              </strong>
+            </div>
+          </div>
+          <RevenueChart daily={a.daily} />
+        </section>
+        <section className="admin-card recent-card">
+          <header>
+            <div>
+              <span className="admin-eyebrow">AKTIVITAS</span>
+              <h2>Pesanan terbaru</h2>
+              <p>Order yang baru masuk.</p>
+            </div>
+          </header>
+          <OrdersTable orders={a.recentOrders.slice(0, 6)} />
+        </section>
+      </div>
+      <section className="admin-health">
+        <article>
+          <Boxes size={22} />
+          <div>
+            <strong>{data.products.length} produk</strong>
+            <span>{a.lowStock} stok perlu diperhatikan</span>
+          </div>
+        </article>
+        <article>
+          <UsersRound size={22} />
+          <div>
+            <strong>{a.activeSales} sales aktif</strong>
+            <span>
+              {data.sales.filter((s: any) => s.status === 'pending').length}{' '}
+              menunggu persetujuan
+            </span>
+          </div>
+        </article>
+        <article>
+          <Tag size={22} />
+          <div>
+            <strong>
+              {data.promos.filter((p: any) => p.active).length} promo aktif
+            </strong>
+            <span>Siap digunakan saat checkout</span>
+          </div>
+        </article>
+      </section>
+    </>
+  );
+}
+
 export function AdminPortal() {
   const [data, setData] = useState<any>(null),
     [loading, setLoading] = useState(true),
-    [tab, setTab] = useState('products'),
+    [tab, setTab] = useState('dashboard'),
+    [query, setQuery] = useState(''),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
     [edit, setEdit] = useState<any>(null),
@@ -145,331 +358,438 @@ export function AdminPortal() {
         </div>
       </main>
     );
+  const navigation = [
+    ['dashboard', 'Dashboard', LayoutDashboard],
+    ['products', 'Produk', Boxes],
+    ['orders', 'Pesanan', ClipboardList],
+    ['sales', 'Sales & Referral', UsersRound],
+    ['promos', 'Voucher Promo', Tag],
+  ];
+  const pageTitle: Record<string, [string, string]> = {
+    dashboard: ['Dashboard', 'Pantau performa toko dan operasional terbaru.'],
+    products: ['Produk', 'Kelola harga, stok, dan informasi katalog.'],
+    orders: ['Pesanan', 'Pantau transaksi pelanggan dari satu tempat.'],
+    sales: ['Sales & Referral', 'Setujui sales dan atur batas diskonnya.'],
+    promos: ['Voucher Promo', 'Kelola program promo untuk pelanggan.'],
+  };
+  const changeTab = (value: string) => {
+    setTab(value);
+    setEdit(null);
+    setActivities(null);
+    setQuery('');
+  };
   return (
-    <main className="container page portal-dashboard admin-dashboard">
-      <header className="portal-heading">
-        <div>
-          <span className="kicker">KLIKFIBER / MYSHOP</span>
-          <h1>Kelola toko, satu tempat.</h1>
-          <p>{data.email}</p>
-        </div>
-        <button
-          className="btn outline"
-          onClick={async () => {
-            await api('portal/admin/logout', {});
-            setData(null);
-          }}
-        >
-          Keluar admin
-        </button>
-      </header>
-      <nav className="portal-tabs" aria-label="Menu admin">
-        {[
-          ['products', 'Produk & Harga'],
-          ['sales', 'Pendaftaran Sales'],
-          ['promos', 'Promo'],
-        ].map(([v, l]) => (
+    <main className="portal-dashboard admin-dashboard admin-app">
+      <aside className="admin-sidebar">
+        <Link href="/" className="admin-brand">
+          <span>K</span>
+          <div>
+            <strong>KLIKFIBER</strong>
+            <small>MYSHOP</small>
+          </div>
+        </Link>
+        <nav aria-label="Menu admin">
+          {navigation.map(([value, label, Icon]: any) => (
+            <button
+              key={value}
+              aria-pressed={tab === value}
+              onClick={() => changeTab(value)}
+            >
+              <Icon size={19} /> <span>{label}</span>
+              {value === 'sales' &&
+                data.sales.some((s: any) => s.status === 'pending') && (
+                  <b>
+                    {
+                      data.sales.filter((s: any) => s.status === 'pending')
+                        .length
+                    }
+                  </b>
+                )}
+            </button>
+          ))}
+        </nav>
+        <div className="admin-sidebar-foot">
+          <div className="admin-user">
+            <span>AK</span>
+            <div>
+              <strong>Admin Toko</strong>
+              <small>{data.email}</small>
+            </div>
+          </div>
           <button
-            key={v}
-            aria-pressed={tab === v}
-            onClick={() => {
-              setTab(v);
-              setEdit(null);
-              setActivities(null);
+            onClick={async () => {
+              await api('portal/admin/logout', {});
+              setData(null);
             }}
           >
-            {l}
-            {v === 'sales' &&
-              ` (${data.sales.filter((s: any) => s.status === 'pending').length})`}
+            <LogOut size={18} /> Keluar admin
           </button>
-        ))}
-      </nav>
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
-      {tab === 'products' && (
-        <section className="panel">
-          <h2>Katalog toko</h2>
-          <p>
-            Perubahan produk, harga dan stok langsung digunakan oleh katalog
-            publik.
-          </p>
-          <div className="portal-products">
-            {data.products.map((p: any) => (
-              <article key={p.id}>
-                <img src={p.imageSrc} alt="" />
-                <div>
-                  <strong>{p.name}</strong>
-                  <p>
-                    {p.model} · {rupiah(p.price)} · Stok {p.stock}
-                  </p>
-                </div>
-                <button
-                  className="btn outline"
-                  onClick={() => setEdit({ kind: 'product', ...p })}
-                >
-                  Edit
-                </button>
-              </article>
-            ))}
+        </div>
+      </aside>
+      <div className="admin-workspace">
+        <header className="admin-topbar">
+          <label>
+            <Search size={18} />
+            <input
+              aria-label="Cari data dashboard"
+              placeholder="Cari produk atau pesanan…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </label>
+          <div>
+            <button aria-label="Notifikasi">
+              <Bell size={19} />
+              {data.analytics.awaitingPayment > 0 && (
+                <b>{data.analytics.awaitingPayment}</b>
+              )}
+            </button>
+            <span className="admin-avatar">AK</span>
+            <p>
+              <strong>Admin Toko</strong>
+              <small>Administrator</small>
+            </p>
           </div>
-        </section>
-      )}
-      {tab === 'sales' && (
-        <section className="panel">
-          <h2>Mitra sales</h2>
-          {!data.sales.length && <p>Belum ada pendaftaran sales.</p>}
-          {data.sales.map((s: any) => (
-            <article className="portal-sales-row" key={s.id}>
-              <div>
-                <strong>{s.name}</strong>
-                <p>
-                  {s.email}
-                  <br />
-                  {s.phone}
-                </p>
-                <span className="tiny-pill">{statusLabel[s.status]}</span>
-                {s.code && (
-                  <p>
-                    Kode {s.code} · Diskon {s.discount}% · Batas{' '}
-                    {s.max_discount}% / {rupiah(s.cap)}
-                  </p>
-                )}
+        </header>
+        <div className="admin-content">
+          <header className="admin-page-heading">
+            <div>
+              <span className="admin-eyebrow">OPERASIONAL TOKO</span>
+              <h1>{pageTitle[tab][0]}</h1>
+              <p>{pageTitle[tab][1]}</p>
+            </div>
+            <button className="admin-refresh" onClick={() => load(true)}>
+              <TrendingUp size={17} /> Perbarui data
+            </button>
+          </header>
+          {error && (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          )}
+          {tab === 'dashboard' && <AdminOverview data={data} />}
+          {tab === 'products' && (
+            <section className="panel">
+              <h2>Katalog toko</h2>
+              <p>
+                Perubahan produk, harga dan stok langsung digunakan oleh katalog
+                publik.
+              </p>
+              <div className="portal-products">
+                {data.products
+                  .filter((p: any) =>
+                    `${p.name} ${p.model}`
+                      .toLowerCase()
+                      .includes(query.toLowerCase()),
+                  )
+                  .map((p: any) => (
+                    <article key={p.id}>
+                      <img src={p.imageSrc} alt="" />
+                      <div>
+                        <strong>{p.name}</strong>
+                        <p>
+                          {p.model} · {rupiah(p.price)} · Stok {p.stock}
+                        </p>
+                      </div>
+                      <button
+                        className="btn outline"
+                        onClick={() => setEdit({ kind: 'product', ...p })}
+                      >
+                        Edit
+                      </button>
+                    </article>
+                  ))}
               </div>
-              <form
-                className="portal-approval"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const f = formData(e.currentTarget);
-                  void action('sales', { id: s.id, ...f, status: 'approved' });
-                }}
-              >
-                <label>
-                  Batas diskon (%)
-                  <input
-                    name="maxDiscount"
-                    type="number"
-                    min="0"
-                    max="50"
-                    required
-                    defaultValue={s.max_discount}
-                  />
-                </label>
-                <label>
-                  Maksimal potongan (Rp)
-                  <input
-                    name="cap"
-                    type="number"
-                    min="0"
-                    max="10000000"
-                    required
-                    defaultValue={s.cap}
-                  />
-                </label>
-                <button className="btn" disabled={busy}>
-                  {s.status === 'approved' ? 'Simpan batas' : 'Setujui sales'}
-                </button>
+            </section>
+          )}
+          {tab === 'orders' && (
+            <section className="admin-card orders-page-card">
+              <div className="section-heading">
+                <div>
+                  <h2>Semua pesanan</h2>
+                  <p>{data.analytics.totalOrders} transaksi tercatat.</p>
+                </div>
+                <span className="live-pill">
+                  <i /> Data realtime
+                </span>
+              </div>
+              <OrdersTable
+                orders={data.analytics.recentOrders.filter((order: any) =>
+                  `${order.number} ${order.name}`
+                    .toLowerCase()
+                    .includes(query.toLowerCase()),
+                )}
+              />
+            </section>
+          )}
+          {tab === 'sales' && (
+            <section className="panel">
+              <h2>Mitra sales</h2>
+              {!data.sales.length && <p>Belum ada pendaftaran sales.</p>}
+              {data.sales.map((s: any) => (
+                <article className="portal-sales-row" key={s.id}>
+                  <div>
+                    <strong>{s.name}</strong>
+                    <p>
+                      {s.email}
+                      <br />
+                      {s.phone}
+                    </p>
+                    <span className="tiny-pill">{statusLabel[s.status]}</span>
+                    {s.code && (
+                      <p>
+                        Kode {s.code} · Diskon {s.discount}% · Batas{' '}
+                        {s.max_discount}% / {rupiah(s.cap)}
+                      </p>
+                    )}
+                  </div>
+                  <form
+                    className="portal-approval"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const f = formData(e.currentTarget);
+                      void action('sales', {
+                        id: s.id,
+                        ...f,
+                        status: 'approved',
+                      });
+                    }}
+                  >
+                    <label>
+                      Batas diskon (%)
+                      <input
+                        name="maxDiscount"
+                        type="number"
+                        min="0"
+                        max="50"
+                        required
+                        defaultValue={s.max_discount}
+                      />
+                    </label>
+                    <label>
+                      Maksimal potongan (Rp)
+                      <input
+                        name="cap"
+                        type="number"
+                        min="0"
+                        max="10000000"
+                        required
+                        defaultValue={s.cap}
+                      />
+                    </label>
+                    <button className="btn" disabled={busy}>
+                      {s.status === 'approved'
+                        ? 'Simpan batas'
+                        : 'Setujui sales'}
+                    </button>
+                    <button
+                      className="btn outline"
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        action('sales', {
+                          id: s.id,
+                          status:
+                            s.status === 'pending' ? 'rejected' : 'suspended',
+                          maxDiscount: s.max_discount,
+                          cap: s.cap,
+                        })
+                      }
+                    >
+                      {s.status === 'pending' ? 'Tolak' : 'Nonaktifkan'}
+                    </button>
+                    {s.code && (
+                      <button
+                        className="btn outline"
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            setActivities(
+                              await api('portal/admin/activity?code=' + s.code),
+                            );
+                          } catch (e: any) {
+                            setError(e.message);
+                          }
+                        }}
+                      >
+                        Lihat penggunaan kode
+                      </button>
+                    )}
+                  </form>
+                </article>
+              ))}
+              {activities && (
+                <section>
+                  <h3>Penggunaan referral</h3>
+                  <Activity items={activities} />
+                </section>
+              )}
+            </section>
+          )}
+          {tab === 'promos' && (
+            <section className="panel">
+              <div className="portal-heading">
+                <h2>Promo toko</h2>
                 <button
-                  className="btn outline"
-                  type="button"
-                  disabled={busy}
+                  className="btn"
                   onClick={() =>
-                    action('sales', {
-                      id: s.id,
-                      status: s.status === 'pending' ? 'rejected' : 'suspended',
-                      maxDiscount: s.max_discount,
-                      cap: s.cap,
+                    setEdit({
+                      kind: 'promo',
+                      code: '',
+                      name: '',
+                      percent: 5,
+                      cap: 300000,
+                      active: true,
                     })
                   }
                 >
-                  {s.status === 'pending' ? 'Tolak' : 'Nonaktifkan'}
+                  Buat promo
                 </button>
-                {s.code && (
+              </div>
+              <p>
+                Promo aktif bisa digunakan pembeli pada checkout atau penawaran.
+              </p>
+              {data.promos.map((p: any) => (
+                <article className="portal-sales-row" key={p.code}>
+                  <div>
+                    <strong>
+                      {p.code} — {p.name}
+                    </strong>
+                    <p>
+                      {p.percent}% · Maks. {rupiah(p.cap)} ·{' '}
+                      {p.active ? 'Aktif' : 'Nonaktif'}
+                    </p>
+                  </div>
                   <button
                     className="btn outline"
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        setActivities(
-                          await api('portal/admin/activity?code=' + s.code),
-                        );
-                      } catch (e: any) {
-                        setError(e.message);
-                      }
-                    }}
+                    onClick={() => setEdit({ kind: 'promo', ...p })}
                   >
-                    Lihat penggunaan kode
+                    Edit promo
                   </button>
-                )}
-              </form>
-            </article>
-          ))}
-          {activities && (
-            <section>
-              <h3>Penggunaan referral</h3>
-              <Activity items={activities} />
+                </article>
+              ))}
             </section>
           )}
-        </section>
-      )}
-      {tab === 'promos' && (
-        <section className="panel">
-          <div className="portal-heading">
-            <h2>Promo toko</h2>
-            <button
-              className="btn"
-              onClick={() =>
-                setEdit({
-                  kind: 'promo',
-                  code: '',
-                  name: '',
-                  percent: 5,
-                  cap: 300000,
-                  active: true,
-                })
-              }
+          {edit && (
+            <section
+              className="panel portal-editor"
+              aria-label="Editor"
+              id="portal-editor"
             >
-              Buat promo
-            </button>
-          </div>
-          <p>
-            Promo aktif bisa digunakan pembeli pada checkout atau penawaran.
-          </p>
-          {data.promos.map((p: any) => (
-            <article className="portal-sales-row" key={p.code}>
-              <div>
-                <strong>
-                  {p.code} — {p.name}
-                </strong>
-                <p>
-                  {p.percent}% · Maks. {rupiah(p.cap)} ·{' '}
-                  {p.active ? 'Aktif' : 'Nonaktif'}
-                </p>
+              <div className="portal-heading">
+                <h2>
+                  {edit.kind === 'product' ? 'Edit produk' : 'Edit promo'}
+                </h2>
+                <button className="btn outline" onClick={() => setEdit(null)}>
+                  Tutup
+                </button>
               </div>
-              <button
-                className="btn outline"
-                onClick={() => setEdit({ kind: 'promo', ...p })}
+              <form
+                className="stack"
+                key={edit.id || edit.code || 'new'}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const f = formData(e.currentTarget);
+                  void action(edit.kind === 'product' ? 'product' : 'promo', {
+                    ...f,
+                    id: edit.id,
+                    active: f.active === 'on',
+                  });
+                }}
               >
-                Edit promo
-              </button>
-            </article>
-          ))}
-        </section>
-      )}
-      {edit && (
-        <section className="panel portal-editor" aria-label="Editor" id="portal-editor">
-          <div className="portal-heading">
-            <h2>{edit.kind === 'product' ? 'Edit produk' : 'Edit promo'}</h2>
-            <button className="btn outline" onClick={() => setEdit(null)}>
-              Tutup
-            </button>
-          </div>
-          <form
-            className="stack"
-            key={edit.id || edit.code || 'new'}
-            onSubmit={(e) => {
-              e.preventDefault();
-              const f = formData(e.currentTarget);
-              void action(edit.kind === 'product' ? 'product' : 'promo', {
-                ...f,
-                id: edit.id,
-                active: f.active === 'on',
-              });
-            }}
-          >
-            <label>
-              Nama
-              <input name="name" required defaultValue={edit.name} />
-            </label>
-            {edit.kind === 'product' ? (
-              <>
                 <label>
-                  SKU / Model
-                  <input name="model" required defaultValue={edit.model} />
+                  Nama
+                  <input name="name" required defaultValue={edit.name} />
                 </label>
-                <label>
-                  Harga (Rp)
-                  <input
-                    name="price"
-                    type="number"
-                    min="0"
-                    max="1000000000"
-                    required
-                    defaultValue={edit.price}
-                  />
-                </label>
-                <label>
-                  Stok
-                  <input
-                    name="stock"
-                    type="number"
-                    min="0"
-                    max="1000000"
-                    required
-                    defaultValue={edit.stock}
-                  />
-                </label>
-                <label>
-                  Deskripsi
-                  <textarea
-                    name="description"
-                    rows={5}
-                    required
-                    defaultValue={edit.description}
-                  />
-                </label>
-              </>
-            ) : (
-              <>
-                <label>
-                  Kode promo
-                  <input
-                    name="code"
-                    pattern="[A-Za-z0-9]{3,20}"
-                    required
-                    defaultValue={edit.code}
-                  />
-                </label>
-                <label>
-                  Diskon (%)
-                  <input
-                    name="percent"
-                    type="number"
-                    min="1"
-                    max="50"
-                    required
-                    defaultValue={edit.percent}
-                  />
-                </label>
-                <label>
-                  Maksimal potongan (Rp)
-                  <input
-                    name="cap"
-                    type="number"
-                    min="1"
-                    max="10000000"
-                    required
-                    defaultValue={edit.cap}
-                  />
-                </label>
-                <label>
-                  <input
-                    name="active"
-                    type="checkbox"
-                    defaultChecked={edit.active}
-                  />{' '}
-                  Promo aktif
-                </label>
-              </>
-            )}
-            <button className="btn" disabled={busy}>
-              {busy ? 'Menyimpan…' : 'Simpan perubahan'}
-            </button>
-          </form>
-        </section>
-      )}
+                {edit.kind === 'product' ? (
+                  <>
+                    <label>
+                      SKU / Model
+                      <input name="model" required defaultValue={edit.model} />
+                    </label>
+                    <label>
+                      Harga (Rp)
+                      <input
+                        name="price"
+                        type="number"
+                        min="0"
+                        max="1000000000"
+                        required
+                        defaultValue={edit.price}
+                      />
+                    </label>
+                    <label>
+                      Stok
+                      <input
+                        name="stock"
+                        type="number"
+                        min="0"
+                        max="1000000"
+                        required
+                        defaultValue={edit.stock}
+                      />
+                    </label>
+                    <label>
+                      Deskripsi
+                      <textarea
+                        name="description"
+                        rows={5}
+                        required
+                        defaultValue={edit.description}
+                      />
+                    </label>
+                  </>
+                ) : (
+                  <>
+                    <label>
+                      Kode promo
+                      <input
+                        name="code"
+                        pattern="[A-Za-z0-9]{3,20}"
+                        required
+                        defaultValue={edit.code}
+                      />
+                    </label>
+                    <label>
+                      Diskon (%)
+                      <input
+                        name="percent"
+                        type="number"
+                        min="1"
+                        max="50"
+                        required
+                        defaultValue={edit.percent}
+                      />
+                    </label>
+                    <label>
+                      Maksimal potongan (Rp)
+                      <input
+                        name="cap"
+                        type="number"
+                        min="1"
+                        max="10000000"
+                        required
+                        defaultValue={edit.cap}
+                      />
+                    </label>
+                    <label>
+                      <input
+                        name="active"
+                        type="checkbox"
+                        defaultChecked={edit.active}
+                      />{' '}
+                      Promo aktif
+                    </label>
+                  </>
+                )}
+                <button className="btn" disabled={busy}>
+                  {busy ? 'Menyimpan…' : 'Simpan perubahan'}
+                </button>
+              </form>
+            </section>
+          )}
+        </div>
+      </div>
     </main>
   );
 }

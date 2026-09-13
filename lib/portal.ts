@@ -188,7 +188,8 @@ export async function portalRequest(req: Request, path: string[], body: any) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      domain: process.env.NODE_ENV === 'production' ? '.klikfiber.id' : undefined,
+      domain:
+        process.env.NODE_ENV === 'production' ? '.klikfiber.id' : undefined,
       path: '/',
       maxAge: 28800,
     });
@@ -207,11 +208,86 @@ export async function portalRequest(req: Request, path: string[], body: any) {
     if (action === 'admin/overview' && !post) {
       const sales =
         await sql`SELECT * FROM portal_sales ORDER BY created_at DESC`;
+      const catalog = await liveProducts();
+      const orderRows =
+        await sql`SELECT payload FROM records WHERE kind='order' ORDER BY payload::jsonb->>'createdAt' DESC LIMIT 200`;
+      const orders = orderRows
+        .map((row) => {
+          try {
+            return typeof row.payload === 'string'
+              ? JSON.parse(row.payload)
+              : row.payload;
+          } catch {
+            return null;
+          }
+        })
+        .filter(Boolean);
+      const paidStatuses = new Set([
+        'confirmed',
+        'processing',
+        'shipped',
+        'completed',
+      ]);
+      const isPaid = (order: any) =>
+        order.paymentStatus === 'paid' || paidStatuses.has(order.status);
+      const today = new Date().toISOString().slice(0, 10);
+      const daily = Array.from({ length: 7 }, (_, index) => {
+        const day = new Date();
+        day.setUTCDate(day.getUTCDate() - (6 - index));
+        const date = day.toISOString().slice(0, 10);
+        const matches = orders.filter((order) =>
+          String(order.createdAt || '').startsWith(date),
+        );
+        return {
+          date,
+          label: day.toLocaleDateString('id-ID', {
+            weekday: 'short',
+            timeZone: 'UTC',
+          }),
+          revenue: matches
+            .filter(isPaid)
+            .reduce((sum, order) => sum + Number(order.total || 0), 0),
+          orders: matches.length,
+        };
+      });
       return {
         email: ADMIN,
-        products: await liveProducts(),
+        products: catalog,
         sales,
         promos: await sql`SELECT * FROM portal_promos ORDER BY code`,
+        analytics: {
+          totalRevenue: orders
+            .filter(isPaid)
+            .reduce((sum, order) => sum + Number(order.total || 0), 0),
+          totalOrders: orders.length,
+          todayOrders: orders.filter((order) =>
+            String(order.createdAt || '').startsWith(today),
+          ).length,
+          awaitingPayment: orders.filter(
+            (order) =>
+              order.status === 'awaiting_payment' ||
+              order.paymentStatus === 'pending',
+          ).length,
+          activeSales: sales.filter((sale) => sale.status === 'approved')
+            .length,
+          lowStock: catalog.filter((product) => product.stock <= 5).length,
+          daily,
+          recentOrders: orders.slice(0, 50).map((order) => ({
+            id: order.id,
+            number: order.number || order.id,
+            name: order.address?.name || order.name || 'Pelanggan',
+            total: Number(order.total || 0),
+            status: order.status || 'awaiting_payment',
+            paymentStatus: order.paymentStatus || 'pending',
+            createdAt: order.createdAt,
+            itemCount: Array.isArray(order.items)
+              ? order.items.reduce(
+                  (sum: number, item: any) => sum + Number(item.qty || 0),
+                  0,
+                )
+              : 0,
+          })),
+        },
       };
     }
     if (action === 'admin/product' && post) {
@@ -320,8 +396,10 @@ export async function portalRequest(req: Request, path: string[], body: any) {
     throw new BusinessError('Akses sales menunggu persetujuan admin.', 403);
   if (action === 'sales/discount' && post) {
     const discount = num(body.discount, 0, sales.max_discount);
-    const updated=await sql`UPDATE portal_sales SET discount=${discount} WHERE id=${user.id} AND status='approved' AND max_discount>=${discount} RETURNING id`;
-    if(!updated.length)throw new BusinessError('Izin sales berubah. Muat ulang halaman.',409);
+    const updated =
+      await sql`UPDATE portal_sales SET discount=${discount} WHERE id=${user.id} AND status='approved' AND max_discount>=${discount} RETURNING id`;
+    if (!updated.length)
+      throw new BusinessError('Izin sales berubah. Muat ulang halaman.', 409);
     return { ok: true };
   }
   if (action === 'sales/activity' && !post) return activity(sales.code);
