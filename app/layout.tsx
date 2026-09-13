@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
+import Store from '@/components/store';
 import './globals.css';
 import './playful.css';
 import './portals.css';
@@ -11,7 +13,12 @@ export const metadata: Metadata = {
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="id">
-      <body>{children}</body>
+      <body>
+        <Suspense>
+          <Store />
+        </Suspense>
+        {children}
+      </body>
     </html>
   );
 }

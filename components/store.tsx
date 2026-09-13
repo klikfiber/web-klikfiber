@@ -863,8 +863,7 @@ export default function Store() {
         JSON.parse(localStorage.getItem('klikfiber-favorites') || '[]'),
       );
     } catch {}
-    setReady(true);
-    refresh();
+    refresh().finally(() => setReady(true));
   }, []);
   useEffect(() => {
     if (ready) localStorage.setItem('klikfiber-cart', JSON.stringify(cart));

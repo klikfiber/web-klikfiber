@@ -118,6 +118,7 @@ function Loading() {
   );
 }
 function LoginGate() {
+  const store = useStore();
   const path = usePathname();
   const area = path.startsWith('/myshop') || path.startsWith('/admin') || path.startsWith('/marketing') ? 'Admin' : path.startsWith('/sales') ? 'Sales' : '';
   return (
@@ -125,7 +126,7 @@ function LoginGate() {
       <span className="kicker">{area === 'Admin' ? 'PENGELOLA TOKO' : area === 'Sales' ? 'MITRA PENJUALAN' : 'AKUN KLIKFIBER.ID'}</span>
       <h1>{area ? `Masuk ${area} Area` : 'Selamat datang di KLIKFIBER'}</h1>
       <p>{area === 'Admin' ? 'Masuk dengan akun pengelola yang telah diberi akses.' : area === 'Sales' ? 'Kelola referral dan pantau peluang penjualan Anda.' : 'Masuk atau daftar untuk melanjutkan.'}</p>
-      <CustomerAuth done={() => location.reload()} />
+      <CustomerAuth done={async () => { await store.refresh(); }} />
     </div>
   );
 }
@@ -692,9 +693,6 @@ function OrderView({ order, reload }: { order: any; reload: () => void }) {
     </section>
   );
 }
-function CustomerNavigation() {
- return <nav className="customer-navigation" aria-label="Pesanan dan akun"><Link href="/akun/ringkasan">Ringkasan</Link><Link href="/akun/pesanan">Pesanan Saya</Link><Link href="/akun/alamat">Alamat</Link><Link href="/akun/wishlist">Wishlist</Link><Link href="/akun/penawaran">Penawaran</Link></nav>;
-}
 export function Account() {
   const {products}=useStore();
   const s = useStore();
@@ -707,6 +705,7 @@ export function Account() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [name, setName] = useState('');
+  const isSummary = path === '/akun' || path === '/akun/ringkasan';
   async function load() {
     setLoading(true);
     setError('');
@@ -739,7 +738,8 @@ export function Account() {
     [Building2, 'Penawaran Proyek', '/akun/penawaran'],
     [UserRound, 'Profil', '/akun/profil'],
   ];
-  const selected = path.split('/')[3];
+  const selected = isSummary ? undefined : path.split('/')[3];
+  if (!s.ready) return <main className="container page"><Loading /></main>;
   if (!s.profile) return <main className="container page"><LoginGate /></main>;
   return (
     <main className="container page">
@@ -752,9 +752,9 @@ export function Account() {
           </div>
           {links.map(([Icon, label, href]: any) => (
             <Link
-              href={href+'#account-content'}
+              href={href}
               key={href}
-              className={path === href ? 'active' : ''}
+              className={(href === '/akun' ? isSummary : path === href) ? 'active' : ''}
             >
               <Icon size={19} />
               {label}
@@ -807,7 +807,7 @@ export function Account() {
               <div className="page-heading">
                 <span className="kicker">AKUN KLIKFIBER</span>
                 <h1>
-                  {path === '/akun'
+                  {isSummary
                     ? `Halo, ${s.profile.name}!`
                     : path.includes('/alamat')
                       ? 'Alamat Pengiriman'
@@ -819,7 +819,7 @@ export function Account() {
                 </h1>
                 <p>Kelola kebutuhan dan pantau setiap langkah pesanan Anda.</p>
               </div>
-              {path === '/akun' && (
+              {isSummary && (
                 <>
                   <div className="stat-grid">
                     <div className="stat-card">
@@ -860,11 +860,11 @@ export function Account() {
                   />
                 </>
               )}
-              {(path === '/akun' || path.includes('/pesanan')) && (
+              {(isSummary || path.includes('/pesanan')) && (
                 <>
                   {(selected
                     ? orders.filter((o) => o.id === selected)
-                    : path === '/akun'
+                    : isSummary
                       ? orders.slice(0, 1)
                       : orders
                   ).map((o) => (
