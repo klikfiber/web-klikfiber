@@ -76,6 +76,8 @@ import {
 export async function api(path: string, body?: unknown) {
   const r = await fetch('/api/v1/' + path, {
     method: body ? 'POST' : 'GET',
+    credentials: 'same-origin',
+    cache: 'no-store',
     headers: { 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
   });

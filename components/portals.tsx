@@ -50,11 +50,14 @@ export function AdminPortal() {
     [busy, setBusy] = useState(false),
     [edit, setEdit] = useState<any>(null),
     [activities, setActivities] = useState<any[] | null>(null);
-  async function load() {
+  async function load(showError = false) {
     try {
       setData(await api('portal/admin/overview'));
-    } catch {
+      return true;
+    } catch (e: any) {
       setData(null);
+      if (showError) setError(e.message);
+      return false;
     } finally {
       setLoading(false);
     }
@@ -103,7 +106,7 @@ export function AdminPortal() {
               setError('');
               try {
                 await api('portal/admin/login', formData(e.currentTarget));
-                await load();
+                await load(true);
               } catch (x: any) {
                 setError(x.message);
               } finally {

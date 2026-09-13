@@ -187,7 +187,8 @@ export async function portalRequest(req: Request, path: string[], body: any) {
     (await cookies()).set(COOKIE, token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'lax',
+      domain: process.env.NODE_ENV === 'production' ? '.klikfiber.id' : undefined,
       path: '/',
       maxAge: 28800,
     });
