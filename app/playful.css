@@ -104,20 +104,21 @@ h1,h2,h3 { letter-spacing:-.045em; font-weight:800; }
  .header-main .logo { width:158px; flex-basis:158px; }
  .category-grid { gap:10px; padding:2px 2px 10px; scroll-padding-inline:2px; }
  .category-grid a {
-  display:flex;
-  flex:0 0 146px;
-  min-height:126px;
-  padding:13px;
-  flex-direction:column;
-  align-items:flex-start;
-  justify-content:flex-start;
-  gap:5px;
-  text-align:left;
+  display:grid;
+  grid-template-columns:1fr;
+  grid-template-rows:44px auto;
+  flex:0 0 138px;
+  min-height:112px;
+  padding:12px;
+  align-content:center;
+  justify-items:center;
+  gap:7px;
+  text-align:center;
   border-radius:18px;
  }
- .category-grid a>span { display:grid; width:40px; height:40px; flex:0 0 40px; }
- .category-grid a>small { margin-top:3px; font-size:9px; line-height:1.2; }
- .category-grid a>strong { max-width:118px; font-size:12px; line-height:1.22; }
+ .category-grid a>span { grid-row:auto; display:grid; width:40px; height:40px; }
+ .category-grid a>small { display:none; }
+ .category-grid a>strong { grid-row:auto; max-width:112px; font-size:11px; line-height:1.25; word-break:normal; overflow-wrap:normal; }
  .category-grid a>svg { display:none; }
 }
 
