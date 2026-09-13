@@ -699,7 +699,6 @@ export function Account() {
   const {products}=useStore();
   const s = useStore();
   const path = usePathname();
-  const router=useRouter();
   const [avatar,setAvatar]=useState('blue');
   const [saving,setSaving]=useState(false);
   const [orders, setOrders] = useState<any[]>([]);
@@ -775,7 +774,6 @@ export function Account() {
           )}
         </aside>
         <div className="account-content" id="account-content" tabIndex={-1}>
-          {(!s.profile.profileComplete||!s.profile.hasAddress)&&<section className="onboarding-note"><strong>Siapkan akun, belanja jadi gampang.</strong><p>1. Lengkapi profil {s.profile.profileComplete?'✓':''} · 2. Simpan alamat {s.profile.hasAddress?'✓':''}</p><Link href={s.profile.profileComplete?'/akun/alamat':'/akun/profil'}>Lanjutkan pengisian →</Link></section>}
           {path === '/akun/wishlist' ? (
             <>
               <SectionHead
@@ -904,7 +902,6 @@ export function Account() {
                       );
                       notify('Alamat disimpan');
                       await s.refresh();
-                      router.push('/keranjang');
                     } catch (e: any) {
                       notify(e.message, 'error');
                     }
@@ -924,7 +921,6 @@ export function Account() {
                       await api('portal/customer/profile', { name,avatar });
                       await s.refresh();
                       notify('Profil diperbarui');
-                      if(!s.profile.hasAddress)router.push('/akun/alamat');
                     } catch (e: any) {
                       notify(e.message, 'error');
                     } finally {
@@ -948,7 +944,7 @@ export function Account() {
                     Akun pelanggan · Data tersimpan di server dan terikat
                     sesi browser.
                   </p>
-                  <Btn type="submit" disabled={saving}>{saving?'Menyimpan…':!s.profile.hasAddress?'Simpan & lanjut ke alamat':'Simpan Profil'}</Btn>
+                  <Btn type="submit" disabled={saving}>{saving?'Menyimpan…':'Simpan Profil'}</Btn>
                 </form>
               )}
               {path === '/akun/penawaran' && (

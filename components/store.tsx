@@ -847,7 +847,6 @@ export default function Store() {
   const [menu, setMenu] = useState(false);
   const [search, setSearch] = useState('');
   const [busy, setBusy] = useState(false);
-  useEffect(()=>{if(profile&&['/akun','/checkout','/keranjang'].includes(path)&&(!profile.profileComplete||!profile.hasAddress))router.replace(profile.profileComplete?'/akun/alamat':'/akun/profil');},[profile,path,router]);
   useEffect(() => {
     try {
       const c = JSON.parse(localStorage.getItem('klikfiber-cart') || '[]');
@@ -883,7 +882,6 @@ export default function Store() {
       const current=await api('me');
       setProfile(current);
       setFavorites(await api('portal/customer/favorites').catch(()=>[]));
-      if(!current.profileComplete&&!['/myshop','/admin','/marketing','/sales','/akun/profil'].some(p=>path.startsWith(p)))router.replace('/akun/profil');
     } catch {
       setProfile(null);
     }
@@ -903,7 +901,6 @@ export default function Store() {
         notify('Masuk atau daftar untuk menambahkan produk', 'info');
         return;
       }
-      if(!profile.profileComplete||!profile.hasAddress){router.push(profile.profileComplete?'/akun/alamat':'/akun/profil');notify('Lengkapi profil dan alamat sebelum belanja.','info');return;}
       if (!p.stock || p.quote) return;
       setCart((c) => {
         const previous = c.find((x) => x.id === p.id)?.qty || 0;

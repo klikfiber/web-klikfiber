@@ -292,8 +292,6 @@ async function handle(req: Request) {
       } catch {}
     }
   if (r === 'checkout/quote' && isPost) {
-    const customer=await customerDetails(owner);
-    if(!customer.profileComplete||!customer.hasAddress)throw new BusinessError('Lengkapi profil dan alamat sebelum checkout.',403);
     const address = validAddress(body.address);
     if (address.city.toLowerCase() === 'tidak terlayani')
       throw new BusinessError(
