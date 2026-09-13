@@ -369,6 +369,7 @@
   background: transparent;
 }
 .admin-topbar > div {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -523,6 +524,89 @@
   background: #effbf5;
   font-size: 11px;
   font-weight: 800;
+}
+.chart-range {
+  flex: 0 0 auto;
+  display: flex;
+  padding: 4px;
+  border: 1px solid var(--admin-border);
+  border-radius: 12px;
+  background: #f6f8fb;
+}
+.chart-range button {
+  padding: 7px 11px;
+  border-radius: 9px;
+  color: var(--admin-muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+.chart-range button[aria-pressed='true'] {
+  background: white;
+  color: #d95700;
+  box-shadow: 0 2px 8px #18294214;
+}
+.notification-panel {
+  position: absolute;
+  z-index: 50;
+  top: 49px;
+  right: 0;
+  width: min(360px, calc(100vw - 28px));
+  padding: 10px;
+  border: 1px solid var(--admin-border);
+  border-radius: 16px;
+  background: white;
+  box-shadow: 0 20px 55px #12213b26;
+}
+.notification-panel header {
+  display: flex;
+  justify-content: space-between;
+  padding: 9px 10px 12px;
+  border-bottom: 1px solid #edf0f4;
+}
+.notification-panel header span,
+.notification-panel > p {
+  color: var(--admin-muted);
+  font-size: 11px;
+}
+.notification-panel > p {
+  padding: 12px;
+}
+.notification-panel > button {
+  width: 100%;
+  height: auto !important;
+  padding: 11px 8px !important;
+  display: flex !important;
+  justify-content: flex-start;
+  align-items: flex-start !important;
+  gap: 10px;
+  border: 0 !important;
+  border-radius: 10px !important;
+  text-align: left;
+}
+.notification-panel > button:hover {
+  background: #f7f9fc;
+}
+.notification-panel > button > span {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: #fff1e6;
+  color: #d95700;
+}
+.notification-panel > button div {
+  display: grid;
+  gap: 3px;
+}
+.notification-panel > button strong {
+  color: var(--admin-navy);
+  font-size: 12px;
+}
+.notification-panel > button small {
+  color: var(--admin-muted);
+  font-size: 10px;
+  line-height: 1.35;
 }
 .live-pill i {
   width: 7px;
@@ -681,6 +765,30 @@
 }
 .orders-page-card {
   min-height: 520px;
+}
+.admin-dashboard .portal-editor {
+  position: fixed;
+  z-index: 80;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  width: min(620px, calc(100vw - 30px));
+  max-height: min(820px, calc(100vh - 34px));
+  margin: 0;
+  overflow-y: auto;
+  border: 0;
+  border-radius: 20px;
+  box-shadow:
+    0 0 0 100vmax #101f3870,
+    0 26px 80px #101f3845;
+}
+.admin-dashboard .portal-editor .stack {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.admin-dashboard .portal-editor .stack label:has(textarea),
+.admin-dashboard .portal-editor .stack > button {
+  grid-column: 1 / -1;
 }
 .orders-page-card .admin-order-list article {
   padding: 17px 4px;
@@ -891,6 +999,12 @@
   }
   .admin-card > header {
     display: grid;
+  }
+  .admin-dashboard .portal-editor .stack {
+    grid-template-columns: 1fr;
+  }
+  .admin-dashboard .portal-editor .stack > * {
+    grid-column: 1;
   }
   .admin-card h2 {
     font-size: 20px;

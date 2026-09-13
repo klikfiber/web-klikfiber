@@ -137,8 +137,15 @@ h1,h2,h3 { letter-spacing:-.045em; font-weight:800; }
  color:white;
  font-size:9px;
 }
+.icon-btn.mobile { display:none; }
+@media(min-width:768px) {
+ .header { position:sticky; top:0; z-index:40; box-shadow:0 4px 18px #0b132b0d; }
+ .header-main:not(:has(.header-search)) { min-height:76px; }
+ .header-main:not(:has(.header-search)) .logo { margin-right:auto; }
+ .header-action { border-radius:14px; }
+}
 .referral-box { border:1px solid #ffd095; background:linear-gradient(135deg,#fff8e9,#f0f7ff); }
 .referral-box h3 b { margin-left:6px; padding:3px 7px; border-radius:20px; background:#ff850a; color:white; font-size:9px; text-transform:uppercase; letter-spacing:.5px; }
 .referral-box input { text-transform:uppercase; font-weight:800; letter-spacing:.06em; }
 .account-sidebar>button:disabled { cursor:wait; opacity:.65; }
-@media(max-width:767px) { .desktop-quick-nav { display:none!important; } }
+@media(max-width:767px) { .desktop-quick-nav { display:none!important; } .icon-btn.mobile { display:grid; } .header-main .account-action { display:none!important; } }

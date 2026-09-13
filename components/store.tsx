@@ -951,7 +951,7 @@ export default function Store() {
         <a href="#main" className="skip-link">
           Lewati ke konten
         </a>
-        {path === '/' && <><div className="topbar">
+        {!['/myshop','/admin','/marketing','/sales'].some(prefix => path.startsWith(prefix)) && <><div className="topbar">
           <div className="container">
             <span>
               <Truck size={14} /> Solusi fiber untuk Indonesia yang lebih
@@ -973,7 +973,7 @@ export default function Store() {
               <Menu />
             </button>
             <Logo />
-            <form className="search header-search" action="/produk">
+            {(path === '/' || path === '/produk') && <form className="search header-search" action="/produk">
               <Search size={19} />
               <input
                 name="q"
@@ -985,13 +985,17 @@ export default function Store() {
               <button aria-label="Cari">
                 <ArrowRight size={18} />
               </button>
-            </form>
+            </form>}
             <Link className="header-action cart-link" href="/keranjang">
               <span className="cart-icon">
                 <ShoppingCart size={25} />
                 <b>{count}</b>
               </span>
               <span className="desktop">Keranjang</span>
+            </Link>
+            <Link className="header-action account-action" href="/akun">
+              <UserRound size={23} />
+              <span className="desktop">Akun</span>
             </Link>
           </div>
           <nav className="desktop-nav container">
@@ -1096,21 +1100,6 @@ export default function Store() {
             </span>
           </div>
         </footer>}
-        {path !== '/' && !['/myshop','/admin','/marketing','/sales'].some(prefix => path.startsWith(prefix)) && (
-          <nav className="desktop-quick-nav desktop" aria-label="Navigasi cepat desktop">
-            {[
-              [Grid2X2, 'Beranda', '/'],
-              [Cable, 'Produk', '/produk'],
-              [ShoppingCart, 'Keranjang', '/keranjang'],
-              [UserRound, 'Akun', '/akun'],
-            ].map(([Icon, label, url]: any) => (
-              <Link key={url} href={url} className={(url === '/' ? path === '/' : path.startsWith(url)) ? 'active' : ''} aria-label={label} title={label}>
-                <span><Icon size={20}/>{url === '/keranjang' && count > 0 && <b>{count > 99 ? '99+' : count}</b>}</span>
-                {label}
-              </Link>
-            ))}
-          </nav>
-        )}
         {!['/myshop','/admin','/marketing'].some(prefix => path.startsWith(prefix)) && <nav className="bottom-nav mobile" aria-label="Navigasi utama mobile">
           {[
             [Grid2X2, 'Beranda', '/'],

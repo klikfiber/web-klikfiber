@@ -42,7 +42,8 @@ function Activity({ items }: { items: any[] }) {
               {x.number} · {x.kind === 'rfq' ? 'Penawaran' : 'Pesanan'}
             </span>
             <small>
-              {new Date(x.createdAt).toLocaleString('id-ID')} · {x.status}
+              {new Date(x.createdAt).toLocaleString('id-ID')} ·{' '}
+              {orderStatus[x.status] || statusLabel[x.status] || x.status}
             </small>
             {x.total > 0 && (
               <span>
@@ -70,7 +71,7 @@ function RevenueChart({ daily }: { daily: any[] }) {
   const values = daily.map((item) => Number(item.revenue || 0));
   const max = Math.max(...values, 1);
   const points = values.map((value, index) => ({
-    x: 36 + index * 94,
+    x: 36 + index * (564 / Math.max(values.length - 1, 1)),
     y: 174 - (value / max) * 128,
   }));
   const line = points.map((point) => `${point.x},${point.y}`).join(' ');
@@ -81,7 +82,7 @@ function RevenueChart({ daily }: { daily: any[] }) {
         className="admin-chart"
         viewBox="0 0 640 220"
         role="img"
-        aria-label="Kurva omzet tujuh hari terakhir"
+        aria-label={`Kurva omzet ${daily.length} hari terakhir`}
       >
         <defs>
           <linearGradient id="revenueFill" x1="0" y1="0" x2="0" y2="1">
@@ -97,9 +98,13 @@ function RevenueChart({ daily }: { daily: any[] }) {
         {points.map((point, index) => (
           <g key={daily[index].date}>
             <circle cx={point.x} cy={point.y} r="5" className="chart-dot" />
-            <text x={point.x} y="205" textAnchor="middle">
-              {daily[index].label}
-            </text>
+            {(daily.length <= 7 ||
+              index % 5 === 0 ||
+              index === daily.length - 1) && (
+              <text x={point.x} y="205" textAnchor="middle">
+                {daily[index].label}
+              </text>
+            )}
           </g>
         ))}
       </svg>
@@ -143,6 +148,12 @@ function OrdersTable({ orders }: { orders: any[] }) {
 
 function AdminOverview({ data }: { data: any }) {
   const a = data.analytics;
+  const [range, setRange] = useState<7 | 30>(7);
+  const daily = range === 7 ? a.daily7 : a.daily30;
+  const rangeRevenue = daily.reduce(
+    (sum: number, item: any) => sum + item.revenue,
+    0,
+  );
   const metric = [
     [
       'Total omzet',
@@ -174,42 +185,37 @@ function AdminOverview({ data }: { data: any }) {
             <div>
               <span className="admin-eyebrow">PERFORMA TOKO</span>
               <h2>Ringkasan penjualan</h2>
-              <p>Omzet transaksi lunas selama tujuh hari terakhir.</p>
+              <p>Riwayat omzet transaksi lunas.</p>
             </div>
-            <span className="live-pill">
-              <i /> Realtime · 7 hari
-            </span>
+            <div className="chart-range" aria-label="Rentang grafik">
+              {[7, 30].map((days) => (
+                <button
+                  key={days}
+                  aria-pressed={range === days}
+                  onClick={() => setRange(days as 7 | 30)}
+                >
+                  {days} hari
+                </button>
+              ))}
+            </div>
           </header>
           <div className="chart-summary">
             <div>
-              <span>Omzet 7 hari</span>
-              <strong>
-                {rupiah(
-                  a.daily.reduce((sum: number, d: any) => sum + d.revenue, 0),
-                )}
-              </strong>
+              <span>Omzet {range} hari</span>
+              <strong>{rupiah(rangeRevenue)}</strong>
             </div>
             <div>
-              <span>Pesanan 7 hari</span>
+              <span>Pesanan {range} hari</span>
               <strong>
-                {a.daily.reduce((sum: number, d: any) => sum + d.orders, 0)}
+                {daily.reduce((sum: number, d: any) => sum + d.orders, 0)}
               </strong>
             </div>
             <div>
               <span>Rata-rata harian</span>
-              <strong>
-                {rupiah(
-                  Math.round(
-                    a.daily.reduce(
-                      (sum: number, d: any) => sum + d.revenue,
-                      0,
-                    ) / 7,
-                  ),
-                )}
-              </strong>
+              <strong>{rupiah(Math.round(rangeRevenue / range))}</strong>
             </div>
           </div>
-          <RevenueChart daily={a.daily} />
+          <RevenueChart daily={daily} />
         </section>
         <section className="admin-card recent-card">
           <header>
@@ -261,6 +267,7 @@ export function AdminPortal() {
     [query, setQuery] = useState(''),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
+    [notificationsOpen, setNotificationsOpen] = useState(false),
     [edit, setEdit] = useState<any>(null),
     [activities, setActivities] = useState<any[] | null>(null);
   async function load(showError = false) {
@@ -277,6 +284,14 @@ export function AdminPortal() {
   }
   useEffect(() => {
     void load();
+  }, []);
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void api('portal/admin/overview')
+        .then(setData)
+        .catch(() => undefined);
+    }, 30000);
+    return () => window.clearInterval(timer);
   }, []);
   useEffect(() => {
     if (edit)
@@ -438,12 +453,47 @@ export function AdminPortal() {
             />
           </label>
           <div>
-            <button aria-label="Notifikasi">
+            <button
+              aria-label="Notifikasi"
+              aria-expanded={notificationsOpen}
+              onClick={() => setNotificationsOpen((open) => !open)}
+            >
               <Bell size={19} />
-              {data.analytics.awaitingPayment > 0 && (
-                <b>{data.analytics.awaitingPayment}</b>
+              {data.analytics.notifications.length > 0 && (
+                <b>{data.analytics.notifications.length}</b>
               )}
             </button>
+            {notificationsOpen && (
+              <section
+                className="notification-panel"
+                aria-label="Notifikasi toko"
+              >
+                <header>
+                  <strong>Notifikasi</strong>
+                  <span>{data.analytics.notifications.length} terbaru</span>
+                </header>
+                {!data.analytics.notifications.length && (
+                  <p>Semua aktivitas sudah aman.</p>
+                )}
+                {data.analytics.notifications.map((notice: any) => (
+                  <button
+                    key={notice.id}
+                    onClick={() => {
+                      changeTab(notice.type);
+                      setNotificationsOpen(false);
+                    }}
+                  >
+                    <span>
+                      <Bell size={16} />
+                    </span>
+                    <div>
+                      <strong>{notice.title}</strong>
+                      <small>{notice.detail}</small>
+                    </div>
+                  </button>
+                ))}
+              </section>
+            )}
             <span className="admin-avatar">AK</span>
             <p>
               <strong>Admin Toko</strong>

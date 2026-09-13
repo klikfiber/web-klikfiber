@@ -231,25 +231,37 @@ export async function portalRequest(req: Request, path: string[], body: any) {
       const isPaid = (order: any) =>
         order.paymentStatus === 'paid' || paidStatuses.has(order.status);
       const today = new Date().toISOString().slice(0, 10);
-      const daily = Array.from({ length: 7 }, (_, index) => {
-        const day = new Date();
-        day.setUTCDate(day.getUTCDate() - (6 - index));
-        const date = day.toISOString().slice(0, 10);
-        const matches = orders.filter((order) =>
-          String(order.createdAt || '').startsWith(date),
-        );
-        return {
-          date,
-          label: day.toLocaleDateString('id-ID', {
-            weekday: 'short',
-            timeZone: 'UTC',
-          }),
-          revenue: matches
-            .filter(isPaid)
-            .reduce((sum, order) => sum + Number(order.total || 0), 0),
-          orders: matches.length,
-        };
-      });
+      const buildDaily = (days: number) =>
+        Array.from({ length: days }, (_, index) => {
+          const day = new Date();
+          day.setUTCDate(day.getUTCDate() - (days - 1 - index));
+          const date = day.toISOString().slice(0, 10);
+          const matches = orders.filter((order) =>
+            String(order.createdAt || '').startsWith(date),
+          );
+          return {
+            date,
+            label: day.toLocaleDateString('id-ID', {
+              ...(days === 7
+                ? { weekday: 'short' as const }
+                : { day: '2-digit' as const, month: 'short' as const }),
+              timeZone: 'UTC',
+            }),
+            revenue: matches
+              .filter(isPaid)
+              .reduce((sum, order) => sum + Number(order.total || 0), 0),
+            orders: matches.length,
+          };
+        });
+      const daily7 = buildDaily(7);
+      const daily30 = buildDaily(30);
+      const pendingSales = sales.filter((sale) => sale.status === 'pending');
+      const awaitingOrders = orders.filter(
+        (order) =>
+          order.status === 'awaiting_payment' ||
+          order.paymentStatus === 'pending',
+      );
+      const lowStockProducts = catalog.filter((product) => product.stock <= 5);
       return {
         email: ADMIN,
         products: catalog,
@@ -263,15 +275,47 @@ export async function portalRequest(req: Request, path: string[], body: any) {
           todayOrders: orders.filter((order) =>
             String(order.createdAt || '').startsWith(today),
           ).length,
-          awaitingPayment: orders.filter(
-            (order) =>
-              order.status === 'awaiting_payment' ||
-              order.paymentStatus === 'pending',
-          ).length,
+          awaitingPayment: awaitingOrders.length,
           activeSales: sales.filter((sale) => sale.status === 'approved')
             .length,
-          lowStock: catalog.filter((product) => product.stock <= 5).length,
-          daily,
+          lowStock: lowStockProducts.length,
+          daily7,
+          daily30,
+          notifications: [
+            ...(awaitingOrders.length
+              ? [
+                  {
+                    id: 'payments',
+                    type: 'orders',
+                    title: `${awaitingOrders.length} pembayaran tertunda`,
+                    detail: 'Periksa pesanan yang belum dibayar.',
+                  },
+                ]
+              : []),
+            ...(pendingSales.length
+              ? [
+                  {
+                    id: 'sales',
+                    type: 'sales',
+                    title: `${pendingSales.length} pendaftaran sales`,
+                    detail: 'Menunggu persetujuan admin.',
+                  },
+                ]
+              : []),
+            ...(lowStockProducts.length
+              ? [
+                  {
+                    id: 'stock',
+                    type: 'products',
+                    title: `${lowStockProducts.length} stok perlu perhatian`,
+                    detail: lowStockProducts
+                      .slice(0, 2)
+                      .map((product) => product.name)
+                      .join(', '),
+                  },
+                ]
+              : []),
+          ],
           recentOrders: orders.slice(0, 50).map((order) => ({
             id: order.id,
             number: order.number || order.id,
