@@ -194,8 +194,14 @@ async function handle(req: Request) {
   const isPost = req.method === 'POST';
   if (isPost) {
     const origin = req.headers.get('origin');
-    if (origin && origin !== url.origin)
-      throw new BusinessError('Origin tidak diizinkan.', 403);
+    if (origin) {
+      const forwardedHost = req.headers.get('x-forwarded-host')?.split(',')[0].trim();
+      const requestHost = (forwardedHost || req.headers.get('host') || url.host).toLowerCase();
+      let originHost = '';
+      try { originHost = new URL(origin).host.toLowerCase(); } catch {}
+      if (!originHost || (originHost !== requestHost && originHost !== url.host.toLowerCase()))
+        throw new BusinessError('Origin tidak diizinkan.', 403);
+    }
     if (!req.headers.get('content-type')?.includes('application/json'))
       throw new BusinessError('Content-Type harus application/json.', 415);
   }
