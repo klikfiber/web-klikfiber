@@ -909,7 +909,10 @@ export function Account() {
           ) : !s.profile ? (
             <LoginGate />
           ) : loading ? (
-            <Loading />
+            <section className="panel account-loading" aria-live="polite" aria-busy="true">
+              <Loading />
+              <p>Menyiapkan informasi akun…</p>
+            </section>
           ) : error ? (
             <ErrorBox message={error} retry={load} />
           ) : (

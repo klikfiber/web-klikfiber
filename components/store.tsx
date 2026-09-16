@@ -885,6 +885,11 @@ export default function Store() {
   useEffect(() => {
     setMenu(false);
   }, [path]);
+  useEffect(() => {
+    // The account tab is always visible on mobile. Warm its RSC payload so the
+    // first tap stays a client-side transition, even on a slower connection.
+    router.prefetch('/akun');
+  }, [router]);
   async function refresh() {
     try {setCatalog(await api('products'));}catch{}
     try {
@@ -1094,7 +1099,7 @@ export default function Store() {
             [ShoppingCart, 'Keranjang', '/keranjang'],
             [UserRound, 'Akun', '/akun'],
           ].map(([Icon, label, url]: any) => (
-            <Link key={url} href={url} className={(url === '/' ? path === '/' : path.startsWith(url)) ? 'active' : ''} aria-current={(url === '/' ? path === '/' : path.startsWith(url)) ? 'page' : undefined}>
+            <Link key={url} href={url} prefetch className={(url === '/' ? path === '/' : path.startsWith(url)) ? 'active' : ''} aria-current={(url === '/' ? path === '/' : path.startsWith(url)) ? 'page' : undefined}>
               <span className="bottom-icon"><Icon size={22} />{url === '/keranjang' && count > 0 && <b className="nav-cart-count">{count > 99 ? '99+' : count}</b>}</span>
               <span>{label}</span>
             </Link>
