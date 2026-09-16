@@ -246,7 +246,7 @@ export function ProductCard({ p }: { p: Product }) {
           'stock-tag ' + (!p.stock ? 'out' : p.quote ? 'quotation' : '')
         }
       >
-        {p.quote ? 'Penawaran kargo' : p.stock ? 'Stok tersedia' : 'Stok habis'}
+        {p.quote ? 'Tanya harga' : p.stock ? 'Stok tersedia' : 'Stok habis'}
       </span>
       <button
         className={'favorite ' + (s.favorites.includes(p.id) ? 'selected' : '')}
@@ -262,13 +262,13 @@ export function ProductCard({ p }: { p: Product }) {
         </Link>
         <p className="model">{p.model}</p>
         <div className="product-price">
-          {rupiah(p.price)}
+          {p.quote && !p.price ? 'Hubungi sales' : rupiah(p.price)}
           {p.unit && <small> / {p.unit}</small>}
         </div>
         <div className="card-bottom">
           <span className="small muted">
             {p.quote
-              ? 'Ongkir dikonfirmasi'
+              ? 'Konsultasikan paket'
               : p.stock
                 ? `${p.stock} ${p.unit || 'unit'} tersedia`
                 : 'Hubungi tim kami'}
@@ -281,7 +281,7 @@ export function ProductCard({ p }: { p: Product }) {
             onClick={() =>
               p.quote ? location.assign('/penawaran?produk=' + p.id) : s.add(p)
             }
-            disabled={!p.stock}
+            disabled={!p.stock && !p.quote}
           >
             {p.quote ? <FileText size={19} /> : <ShoppingCart size={19} />}
           </button>
@@ -350,15 +350,16 @@ function Home() {
   {id:'hero-1',title:'Klik, sambung,',accent:'beres!',subtitle:'Cari kebutuhan fiber? Semua kumpul di sini.',cta:'Yuk, cari produk',href:'/produk',desktopImage:'/images/play-cable.png',mobileImage:'/images/play-cable.png'},
   {id:'hero-2',title:'Siap ngegas',accent:'di lapangan.',subtitle:'Splicer dan alat kerja untuk proyek berikutnya.',cta:'Lihat peralatannya',href:'/produk?kategori=Fusion%20Splicer',desktopImage:'/images/play-tools.png',mobileImage:'/images/play-tools.png'},
  ];
+ fallbackBanners.push({id:'hero-3',title:'Punya kode sales?',accent:'Belanja lebih hemat.',subtitle:'Gunakan referral sales saat checkout. Potongan mengikuti kode yang aktif.',cta:'Cari produk',href:'/produk',desktopImage:'/images/play-referral.png',mobileImage:'/images/play-referral-mobile.png'},{id:'hero-4',title:'Si kecil,',accent:'pelengkap koneksi.',subtitle:'Kabel, konektor, dan perlengkapan FTTH untuk instalasi kamu.',cta:'Lengkapi sekarang',href:'/produk?kategori=Konektor%20%26%20Adapter',desktopImage:'/images/play-connect.png',mobileImage:'/images/play-connect.png'});
  const [banners,setBanners]=useState<any[]>(fallbackBanners);
- useEffect(()=>{void api('portal/banners').then((items)=>{if(items?.length)setBanners(items);}).catch(()=>undefined);},[]);
+ useEffect(()=>{void api('portal/banners').then((items)=>{if(Array.isArray(items))setBanners(items);}).catch(()=>undefined);},[]);
  const [categoryPaused,setCategoryPaused]=useState(false);
  const categoryRef=useRef<HTMLDivElement>(null);
  useEffect(()=>{if(categoryPaused || matchMedia('(prefers-reduced-motion: reduce)').matches)return;const timer=setInterval(()=>{const el=categoryRef.current;if(el)el.scrollTo({left:el.scrollLeft+130>=el.scrollWidth-el.clientWidth?0:el.scrollLeft+130,behavior:'smooth'});},3500);return()=>clearInterval(timer);},[categoryPaused]);
  return (<>
       <section className="play-hero" aria-label="Inspirasi koneksi" aria-roledescription="carousel">
         <div className="play-track" ref={bannerRef} onScroll={()=>{const el=bannerRef.current;if(el)setBannerIndex(Math.round(el.scrollLeft/el.clientWidth));}}>
-          {banners.map((b,i)=><article className="play-slide" key={b.id} aria-label={`${i+1} dari ${banners.length}`} aria-roledescription="slide">
+          {banners.map((b,i)=><article className="play-slide" data-banner={b.id} key={b.id} aria-label={`${i+1} dari ${banners.length}`} aria-roledescription="slide">
             <picture><source media="(max-width: 767px)" srcSet={b.mobileImage}/><img className="play-art" src={b.desktopImage} alt="" /></picture>
             <div className="play-copy"><span className="play-tag">PILIHAN KLIKFIBER</span>{i===0?<h1>{b.title}<br/><em>{b.accent}</em></h1>:<h2>{b.title}<br/><em>{b.accent}</em></h2>}<p>{b.subtitle}</p><Link className="play-cta" href={b.href}>{b.cta}<ArrowUpRight size={20}/></Link></div>
           </article>)}
@@ -397,12 +398,12 @@ function Home() {
         </section>
         <section className="section">
           <SectionHead
-            title="Kenalan sama jagoannya"
-            sub="Perangkat pilihan buat teman kerja kamu."
+            title="4 jagoan splicer"
+            sub="K33, K33A, KF-4, dan KF4-A. Pilih teman kerja kamu."
             href="/produk"
           />
           <div className="product-grid home-grid">
-            {[products[0], products[1], products[2], products[7]].map((p) => (
+            {['ucl-swift-k33','ucl-swift-k33a','ucl-swift-kf4','ucl-swift-kf4a'].map(id=>products.find(p=>p.id===id)).filter((p): p is Product=>!!p).map((p) => (
               <ProductCard key={p.id} p={p} />
             ))}
           </div>
@@ -439,12 +440,12 @@ function Home() {
         </section>
         <section className="section">
           <SectionHead
-            title="Jangan lupa si kecil ini"
+            title="Pelengkap FTTH"
             sub="Pelengkap instalasi biar makin komplit."
             href="/produk"
           />
           <div className="product-grid home-grid">
-            {[products[5], products[8], products[9], products[10]].map((p) => (
+            {products.filter(p=>['Kabel Fiber Optik','Konektor & Adapter','ODF & Patch Panel','Closure & ODP'].includes(p.category)).slice(0,4).map((p) => (
               <ProductCard key={p.id} p={p} />
             ))}
           </div>
@@ -697,7 +698,7 @@ function Detail({ id }: { id: string }) {
             </span>
           </div>
           <div className="detail-price">
-            {rupiah(p.price)}
+            {p.quote && !p.price ? 'Hubungi sales' : rupiah(p.price)}
             {p.unit && <small> / {p.unit}</small>}
           </div>
           <p>{p.description}</p>
@@ -719,7 +720,7 @@ function Detail({ id }: { id: string }) {
                 Minta Penawaran <FileText size={18} />
               </Btn>
             ) : (
-              <Btn disabled={!p.stock} onClick={() => s.add(p, qty)}>
+              <Btn disabled={!p.stock && !p.quote} onClick={() => s.add(p, qty)}>
                 <ShoppingCart size={19} /> Tambah ke Keranjang
               </Btn>
             )}
@@ -727,7 +728,7 @@ function Detail({ id }: { id: string }) {
           {!p.quote && (
             <Btn
               className="full"
-              disabled={!p.stock}
+              disabled={!p.stock && !p.quote}
               onClick={() => {
                 s.add(p, qty);
                 router.push('/checkout');
@@ -824,9 +825,9 @@ function Detail({ id }: { id: string }) {
         </DialogContent>
       </Dialog>
       <div className="mobile-buy mobile">
-        <strong>{rupiah(p.price)}</strong>
+        <strong>{p.quote && !p.price ? 'Hubungi sales' : rupiah(p.price)}</strong>
         <Btn
-          disabled={!p.stock}
+          disabled={!p.stock && !p.quote}
           onClick={() =>
             p.quote ? router.push('/penawaran?produk=' + p.id) : s.add(p, qty)
           }
@@ -839,6 +840,8 @@ function Detail({ id }: { id: string }) {
 }
 export default function Store() {
   const [catalog,setCatalog]=useState<Product[]>(products);
+  const [social,setSocial]=useState({instagram:'',tiktok:''});
+  useEffect(()=>{void api('portal/settings').then(setSocial).catch(()=>undefined)},[]);
   const router=useRouter();
   const path = usePathname();
   const query = useSearchParams();
@@ -1037,7 +1040,7 @@ export default function Store() {
                 <br />
                 Teman belanja kebutuhan koneksi.
               </p>
-              <div className="footer-tag">Dari satu klik, jadi banyak koneksi.</div>
+              <div className="social-links" aria-label="Media sosial KLIKFIBER">{social.instagram && <a href={social.instagram} target="_blank" rel="noopener noreferrer">Instagram ↗</a>}{social.tiktok && <a href={social.tiktok} target="_blank" rel="noopener noreferrer">TikTok ↗</a>}</div><div className="footer-tag">Dari satu klik, jadi banyak koneksi.</div>
             </div>
             {[
               [

@@ -3,6 +3,12 @@ import { portalRequest, liveProducts, referralCampaign, customerDetails } from '
 import postgres from 'postgres';
 import { products } from '@/lib/catalog';
 import { BusinessError, validAddress, priceCart } from '@/lib/commerce';
+import { midtransSnap, publicMidtransConfig } from '@/lib/midtrans';
+import {
+  isTerminalPaymentStatus,
+  mapMidtransStatus,
+} from '@/lib/payments/midtrans-status';
+import { createHash, timingSafeEqual } from 'node:crypto';
 const schema = [
   `CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, profile TEXT NOT NULL, expires INTEGER NOT NULL)`,
   `ALTER TABLE sessions ALTER COLUMN expires TYPE BIGINT`,
@@ -12,6 +18,28 @@ const schema = [
   `CREATE TABLE IF NOT EXISTS campaigns (owner TEXT NOT NULL,code TEXT NOT NULL,name TEXT NOT NULL,status TEXT NOT NULL,percent INTEGER NOT NULL,cap INTEGER NOT NULL,budget INTEGER NOT NULL,used INTEGER NOT NULL DEFAULT 0,reserved INTEGER NOT NULL DEFAULT 0,quota INTEGER NOT NULL,countUsed INTEGER NOT NULL DEFAULT 0,countReserved INTEGER NOT NULL DEFAULT 0,minSubtotal INTEGER NOT NULL DEFAULT 100000,PRIMARY KEY(owner,code),CHECK(used+reserved<=budget AND countUsed+countReserved<=quota))`,
   `CREATE TABLE IF NOT EXISTS idempotency (owner TEXT NOT NULL,key TEXT NOT NULL,fingerprint TEXT NOT NULL,recordId TEXT NOT NULL,PRIMARY KEY(owner,key))`,
   `CREATE TABLE IF NOT EXISTS guards (id TEXT PRIMARY KEY,ok INTEGER NOT NULL CHECK(ok=1))`,
+  `CREATE TABLE IF NOT EXISTS payments (
+    id TEXT PRIMARY KEY,
+    owner TEXT NOT NULL,
+    order_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    provider_order_id TEXT NOT NULL UNIQUE,
+    provider_transaction_id TEXT UNIQUE,
+    payment_type TEXT,
+    status TEXT NOT NULL,
+    amount BIGINT NOT NULL CHECK(amount>0),
+    snap_token TEXT,
+    redirect_url TEXT,
+    fraud_status TEXT,
+    active_key TEXT UNIQUE,
+    raw_response JSONB,
+    paid_at TIMESTAMPTZ,
+    expires_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS payments_owner_order ON payments(owner,order_id)`,
+  `CREATE INDEX IF NOT EXISTS payments_status ON payments(status)`,
 ];
 type Row = Record<string, any>;
 type QueryResult<T extends Row = Row> = { results: T[] };
@@ -187,6 +215,183 @@ async function release(owner: string, o: any, status: string) {
   await db().batch(statements);
   return next;
 }
+
+function validateOrderAmount(order: any) {
+  const subtotal = order.items.reduce(
+    (sum: number, item: any) => sum + integer(item.price, 0) * integer(item.qty),
+    0,
+  );
+  const total = subtotal - integer(order.discount, 0) + integer(order.shippingCost, 0);
+  if (subtotal !== order.subtotal || total !== order.total || total < 1)
+    throw new BusinessError('Nilai pesanan tidak valid.', 409);
+  return { subtotal, total };
+}
+
+function paymentView(payment: any) {
+  return {
+    id: payment.id,
+    orderId: payment.order_id,
+    provider: payment.provider,
+    providerOrderId: payment.provider_order_id,
+    transactionId: payment.provider_transaction_id,
+    paymentType: payment.payment_type,
+    status: payment.status,
+    amount: Number(payment.amount),
+    snapToken: payment.snap_token,
+    redirectUrl: payment.redirect_url,
+    paidAt: payment.paid_at,
+    expiresAt: payment.expires_at,
+  };
+}
+
+async function createMidtransPayment(owner: string, profile: any, order: any) {
+  if (order.paymentStatus === 'paid' || ['confirmed', 'processing', 'shipped', 'completed'].includes(order.status))
+    throw new BusinessError('Pesanan sudah dibayar.', 409);
+  if (order.status !== 'awaiting_payment')
+    throw new BusinessError('Pesanan ini tidak dapat dibayar.', 409);
+  if (Date.parse(order.expiresAt) <= Date.now())
+    throw new BusinessError('Pesanan telah kedaluwarsa.', 409);
+  const { total } = validateOrderAmount(order);
+
+  const payment = await sql.begin(async (transaction: any) => {
+    const [active] = await transaction`SELECT * FROM payments WHERE active_key=${order.id} LIMIT 1`;
+    if (active) return active;
+    const [attempt] = await transaction`SELECT count(*)::int AS count FROM payments WHERE order_id=${order.id}`;
+    const paymentId = id();
+    const providerOrderId = `${order.number}-P${Number(attempt.count) + 1}`;
+    const [created] = await transaction`
+      INSERT INTO payments(id,owner,order_id,provider,provider_order_id,status,amount,active_key,expires_at)
+      VALUES(${paymentId},${owner},${order.id},'midtrans',${providerOrderId},'creating',${total},${order.id},${order.expiresAt})
+      ON CONFLICT(active_key) DO NOTHING RETURNING *`;
+    if (created) return created;
+    const [concurrent] = await transaction`SELECT * FROM payments WHERE active_key=${order.id} LIMIT 1`;
+    return concurrent;
+  });
+  if (!payment) throw new BusinessError('Pembayaran sedang disiapkan. Coba lagi.', 409);
+  if (payment.snap_token) return paymentView(payment);
+  if (payment.status !== 'creating')
+    throw new BusinessError('Buat ulang pembayaran untuk melanjutkan.', 409);
+
+  const itemDetails = order.items.map((item: any) => ({
+    id: String(item.id).slice(0, 50),
+    name: String(item.name).slice(0, 50),
+    price: integer(item.price, 0),
+    quantity: integer(item.qty),
+  }));
+  itemDetails.push({ id: 'shipping', name: String(order.selectedShipping?.name || 'Pengiriman').slice(0, 50), price: integer(order.shippingCost, 0), quantity: 1 });
+  if (order.discount)
+    itemDetails.push({ id: 'discount', name: 'Diskon referral', price: -integer(order.discount, 0), quantity: 1 });
+  const address = order.address;
+  try {
+    const response = await midtransSnap().createTransaction({
+      transaction_details: {
+        order_id: payment.provider_order_id,
+        gross_amount: total,
+      },
+      item_details: itemDetails,
+      customer_details: {
+        first_name: address.name,
+        email: profile.email,
+        phone: address.phone,
+        shipping_address: {
+          first_name: address.name,
+          phone: address.phone,
+          address: address.street,
+          city: address.city,
+          postal_code: address.postal,
+          country_code: 'IDN',
+        },
+      },
+      expiry: { unit: 'minute', duration: 60 },
+    });
+    const [saved] = await sql`
+      UPDATE payments SET status='pending',snap_token=${response.token},redirect_url=${response.redirect_url},
+      raw_response=${sql.json(response)},updated_at=now() WHERE id=${payment.id} AND status='creating' RETURNING *`;
+    if (!saved) throw new BusinessError('Status pembayaran berubah. Muat ulang.', 409);
+    await update(owner, {
+      ...order,
+      paymentStatus: 'pending',
+      paymentProvider: 'midtrans',
+      paymentAttemptId: saved.id,
+    }).run();
+    console.info('Midtrans transaction created', { orderId: order.number, paymentId: saved.id, status: saved.status });
+    return paymentView(saved);
+  } catch (error) {
+    await sql`UPDATE payments SET status='failed',active_key=NULL,updated_at=now() WHERE id=${payment.id} AND status='creating'`;
+    if (error instanceof BusinessError) throw error;
+    console.error('Midtrans create transaction failed', { orderId: order.number, paymentId: payment.id });
+    throw new BusinessError('Transaksi Midtrans belum dapat dibuat.', 502);
+  }
+}
+
+function validMidtransSignature(payload: any) {
+  const serverKey = process.env.MIDTRANS_SERVER_KEY;
+  if (!serverKey) throw new BusinessError('Midtrans belum dikonfigurasi.', 503);
+  const expected = createHash('sha512')
+    .update(String(payload.order_id) + String(payload.status_code) + String(payload.gross_amount) + serverKey)
+    .digest('hex');
+  const received = String(payload.signature_key || '');
+  const a = Buffer.from(expected);
+  const b = Buffer.from(received);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+async function handleMidtransWebhook(payload: any) {
+  if (!validMidtransSignature(payload))
+    throw new BusinessError('Notifikasi Midtrans tidak valid.', 401);
+  let verified: any;
+  try {
+    verified = await midtransSnap().transaction.notification(payload);
+  } catch {
+    throw new BusinessError('Verifikasi Midtrans gagal.', 401);
+  }
+  const providerOrderId = str(verified.order_id, 5, 150);
+  const [payment] = await sql`SELECT * FROM payments WHERE provider_order_id=${providerOrderId}`;
+  if (!payment) throw new BusinessError('Pembayaran tidak ditemukan.', 404);
+  if (Math.round(Number(verified.gross_amount)) !== Number(payment.amount))
+    throw new BusinessError('Jumlah pembayaran tidak sesuai.', 409);
+  const status = mapMidtransStatus(String(verified.transaction_status), String(verified.fraud_status || ''));
+
+  await sql.begin(async (transaction: any) => {
+    const [locked] = await transaction`SELECT * FROM payments WHERE id=${payment.id} FOR UPDATE`;
+    const [orderRow] = await transaction`SELECT payload FROM records WHERE id=${locked.order_id} AND owner=${locked.owner} AND kind='order' FOR UPDATE`;
+    if (!orderRow) throw new BusinessError('Pesanan pembayaran tidak ditemukan.', 404);
+    const order = JSON.parse(orderRow.payload);
+    const transactionId = String(verified.transaction_id || locked.provider_transaction_id || '') || null;
+    await transaction`
+      UPDATE payments SET status=${status},provider_transaction_id=${transactionId},payment_type=${String(verified.payment_type || '') || null},
+      fraud_status=${String(verified.fraud_status || '') || null},raw_response=${sql.json(verified)},
+      paid_at=CASE WHEN ${status}='paid' THEN COALESCE(paid_at,now()) ELSE paid_at END,
+      active_key=CASE WHEN ${isTerminalPaymentStatus(status)} THEN NULL ELSE active_key END,updated_at=now()
+      WHERE id=${locked.id}`;
+
+    if (status === 'paid' && order.paymentStatus !== 'paid') {
+      const paid = {
+        ...order,
+        status: 'confirmed',
+        paymentStatus: 'paid',
+        paymentProvider: 'midtrans',
+        providerTransactionId: transactionId,
+        paymentType: String(verified.payment_type || ''),
+        paidAt: String(verified.settlement_time || verified.transaction_time || now()),
+      };
+      await transaction`UPDATE records SET payload=${JSON.stringify(paid)} WHERE id=${order.id} AND owner=${locked.owner}`;
+      if (order.code)
+        await transaction`UPDATE campaigns SET reserved=reserved-${order.discount},used=used+${order.discount},countReserved=countReserved-1,countUsed=countUsed+1 WHERE owner=${locked.owner} AND code=${order.code} AND countReserved>0`;
+    } else if (status !== 'paid' && order.paymentStatus !== 'paid') {
+      const next = {
+        ...order,
+        paymentStatus: status,
+        paymentProvider: 'midtrans',
+        providerTransactionId: transactionId,
+        paymentType: String(verified.payment_type || ''),
+      };
+      await transaction`UPDATE records SET payload=${JSON.stringify(next)} WHERE id=${order.id} AND owner=${locked.owner}`;
+    }
+  });
+  console.info('Midtrans notification processed', { providerOrderId, transactionId: verified.transaction_id, status });
+  return { ok: true, status };
+}
 async function handle(req: Request) {
   await init();
   const url = new URL(req.url);
@@ -210,7 +415,7 @@ async function handle(req: Request) {
     const text = await req.text();
     const maxRequestSize = path.join('/') === 'portal/customer/profile'
       ? 420000
-      : path.join('/') === 'portal/admin/banner'
+      : ['portal/admin/banner','portal/admin/product'].includes(path.join('/'))
         ? 12500000
         : 20000;
     if (text.length > maxRequestSize)
@@ -224,6 +429,15 @@ async function handle(req: Request) {
   const rpath = path.join('/');
   if(path[0]==='portal')return respond(await portalRequest(req,path,body));
   if(['admin','marketing','sales'].includes(path[0]))throw new BusinessError('Gunakan portal terbaru di /myshop atau /sales.',410);
+  if (rpath === 'webhooks/midtrans' && isPost)
+    return respond(await handleMidtransWebhook(body));
+  if (rpath === 'payments/midtrans/config' && !isPost) {
+    try {
+      return respond(publicMidtransConfig());
+    } catch {
+      throw new BusinessError('Midtrans belum dikonfigurasi.', 503);
+    }
+  }
   const products=await liveProducts();
   if (rpath === 'auth/demo' || rpath === 'auth/demo-role' || path.includes('simulate-payment')) throw new BusinessError('Layanan tidak tersedia.', 410);
   const auth = await authServer();
@@ -239,6 +453,15 @@ async function handle(req: Request) {
   const owner = session.id as string;
   const profile = JSON.parse(session.profile);
   const r = path.join('/');
+  if (r === 'payments/midtrans/create' && isPost) {
+    const order = await record(owner, str(body.orderId, 10, 100), 'order');
+    return respond(await createMidtransPayment(owner, profile, order), 201);
+  }
+  if (path[0] === 'payments' && path[1] && !isPost) {
+    const order = await record(owner, path[1], 'order');
+    const [payment] = await sql`SELECT * FROM payments WHERE owner=${owner} AND order_id=${order.id} ORDER BY created_at DESC LIMIT 1`;
+    return respond({ order, payment: payment ? paymentView(payment) : null });
+  }
   if (r === 'auth/logout' && isPost) { await auth.auth.signOut(); return respond({ok:true}); }
   if (r === 'shipping/rates' && isPost) {
     const apiKey = process.env.BITESHIP_API_KEY;
@@ -270,7 +493,6 @@ async function handle(req: Request) {
     const rows = await db().prepare("SELECT payload FROM records WHERE kind='rfq' AND payload::jsonb->>'referralCode'=? ORDER BY payload::jsonb->>'createdAt' DESC LIMIT 100").bind(sales.code).all<{payload:string}>();
     return respond(rows.results.map((row) => { const q = JSON.parse(row.payload); return { number:q.number, company:q.company, status:q.status, createdAt:q.createdAt }; }));
   }
-  if (r === 'orders' && isPost) throw new BusinessError('Pembayaran online belum diaktifkan. Hubungi tim KLIKFIBER untuk menyelesaikan pesanan.', 503);
   if (r === 'me') {
     if (isPost) {
       profile.name = str(body.name, 2, 100);
@@ -299,6 +521,8 @@ async function handle(req: Request) {
       Date.parse(o.expiresAt) < Date.now()
     ) {
       try {
+        const [activePayment] = await sql`SELECT id FROM payments WHERE order_id=${o.id} AND active_key=${o.id} LIMIT 1`;
+        if (activePayment) continue;
         await release(owner, o, 'expired');
       } catch {}
     }
@@ -368,6 +592,11 @@ async function handle(req: Request) {
   }
   if (r === 'orders' && !isPost) return respond(await records(owner, 'order'));
   if (r === 'orders' && isPost) {
+    try {
+      publicMidtransConfig();
+    } catch {
+      throw new BusinessError('Pembayaran Midtrans belum dikonfigurasi.', 503);
+    }
     str(body.requestId, 10, 100);
     const old = await db()
       .prepare('SELECT * FROM idempotency WHERE owner=? AND key=?')

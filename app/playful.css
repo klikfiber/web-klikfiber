@@ -179,3 +179,9 @@ h1,h2,h3 { letter-spacing:-.045em; font-weight:800; }
 .referral-box input { text-transform:uppercase; font-weight:800; letter-spacing:.06em; }
 .account-sidebar>button:disabled { cursor:wait; opacity:.65; }
 @media(max-width:767px) { .desktop-quick-nav { display:none!important; } .icon-btn.mobile { display:grid; } .header-main .account-action { display:none!important; } }
+
+.social-links {display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;}
+.social-links a {padding:9px 14px;border:1px solid #cbdcf2;border-radius:999px;background:#fff;color:#0757bd;font-size:12px;font-weight:700;}
+@media(min-width:768px){.category-grid a>small{grid-column:2;grid-row:1;}.category-grid a>strong{grid-column:2;grid-row:2;min-width:0;}}
+.play-slide[data-banner="hero-3"] .play-art {width:100%;object-fit:cover;mask-image:none;}
+@media(max-width:767px){.play-copy h1,.play-copy h2{font-size:clamp(28px,7.5vw,36px);max-width:260px;}.play-slide[data-banner="hero-3"] .play-art{height:100%;object-fit:cover;}.play-slide[data-banner="hero-3"] .play-copy p{max-width:175px;}}

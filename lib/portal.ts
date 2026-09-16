@@ -22,7 +22,7 @@ import {
   scryptSync,
   timingSafeEqual,
 } from 'node:crypto';
-import { products as defaults, type Product } from './catalog';
+import { products as defaults, type Product, categories } from './catalog';
 import { authServer } from './auth/server';
 import { BusinessError } from './commerce';
 
@@ -44,6 +44,7 @@ export async function initPortal() {
       await tx`CREATE TABLE IF NOT EXISTS portal_sales (id TEXT PRIMARY KEY, email TEXT NOT NULL, name TEXT NOT NULL, phone TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', code TEXT UNIQUE, discount INT NOT NULL DEFAULT 0, max_discount INT NOT NULL DEFAULT 5, cap INT NOT NULL DEFAULT 300000, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), approved_at TIMESTAMPTZ)`;
       await tx`CREATE TABLE IF NOT EXISTS portal_promos (code TEXT PRIMARY KEY, name TEXT NOT NULL, percent INT NOT NULL, cap INT NOT NULL, active BOOLEAN NOT NULL DEFAULT true)`;
       await tx`CREATE TABLE IF NOT EXISTS portal_banners (id TEXT PRIMARY KEY, title TEXT NOT NULL, accent TEXT NOT NULL, subtitle TEXT NOT NULL, cta TEXT NOT NULL, href TEXT NOT NULL, desktop_image TEXT NOT NULL, mobile_image TEXT NOT NULL, sort_order INT NOT NULL DEFAULT 0, active BOOLEAN NOT NULL DEFAULT true)`;
+      await tx`CREATE TABLE IF NOT EXISTS portal_settings (id TEXT PRIMARY KEY, data JSONB NOT NULL)`;
       await tx`CREATE TABLE IF NOT EXISTS portal_customers (id TEXT PRIMARY KEY, name TEXT NOT NULL, avatar TEXT NOT NULL DEFAULT 'blue', profile_complete BOOLEAN NOT NULL DEFAULT true)`;
       for (const table of [
         'portal_admin',
@@ -53,6 +54,7 @@ export async function initPortal() {
         'portal_sales',
         'portal_promos',
         'portal_banners',
+        'portal_settings',
         'portal_customers',
         'records',
       ]) {
@@ -63,8 +65,11 @@ export async function initPortal() {
       }
       await tx`INSERT INTO portal_banners(id,title,accent,subtitle,cta,href,desktop_image,mobile_image,sort_order,active) VALUES
         ('hero-1','Klik, sambung,','beres!','Cari kebutuhan fiber? Semua kumpul di sini.','Yuk, cari produk','/produk','/images/play-cable.png','/images/play-cable.png',1,true),
-        ('hero-2','Siap ngegas','di lapangan.','Splicer dan alat kerja untuk proyek berikutnya.','Lihat peralatannya','/produk?kategori=Fusion%20Splicer','/images/play-tools.png','/images/play-tools.png',2,true)
+        ('hero-2','Siap ngegas','di lapangan.','Splicer dan alat kerja untuk proyek berikutnya.','Lihat peralatannya','/produk?kategori=Fusion%20Splicer','/images/play-tools.png','/images/play-tools.png',2,true),
+        ('hero-3','Punya kode sales?','Belanja lebih hemat.','Gunakan referral sales saat checkout. Potongan mengikuti kode yang aktif.','Cari produk','/produk','/images/play-referral.png','/images/play-referral-mobile.png',3,true),
+        ('hero-4','Si kecil,','pelengkap koneksi.','Kabel, konektor, dan perlengkapan FTTH untuk instalasi kamu.','Lengkapi sekarang','/produk?kategori=Konektor%20%26%20Adapter','/images/play-connect.png','/images/play-connect.png',4,true)
         ON CONFLICT(id) DO NOTHING`;
+      await tx`UPDATE portal_banners SET mobile_image='/images/play-referral-mobile.png' WHERE id='hero-3' AND mobile_image='/images/play-referral.png'`;
     })
     .catch((e) => {
       initialized = undefined;
@@ -158,6 +163,7 @@ export async function portalRequest(req: Request, path: string[], body: any) {
   await initPortal();
   const action = path.slice(1).join('/'),
     post = req.method === 'POST';
+  if (action === 'settings' && !post) { const [row] = await sql`SELECT data FROM portal_settings WHERE id='social'`; return row?.data || {instagram:'',tiktok:''}; }
   if (action === 'banners' && !post)
     return sql`SELECT id,title,accent,subtitle,cta,href,desktop_image AS "desktopImage",mobile_image AS "mobileImage",sort_order AS "sortOrder" FROM portal_banners WHERE active=true ORDER BY sort_order,id`;
   if (action === 'admin/login' && post) {
@@ -272,6 +278,7 @@ export async function portalRequest(req: Request, path: string[], body: any) {
       const lowStockProducts = catalog.filter((product) => product.stock <= 5);
       return {
         email: ADMIN,
+        settings: (await sql`SELECT data FROM portal_settings WHERE id='social'`)[0]?.data || {instagram:'',tiktok:''},
         products: catalog,
         sales,
         promos: await sql`SELECT * FROM portal_promos ORDER BY code`,
@@ -333,6 +340,10 @@ export async function portalRequest(req: Request, path: string[], body: any) {
             total: Number(order.total || 0),
             status: order.status || 'awaiting_payment',
             paymentStatus: order.paymentStatus || 'pending',
+            paymentProvider: order.paymentProvider || 'legacy',
+            paymentType: order.paymentType || null,
+            providerTransactionId: order.providerTransactionId || null,
+            paidAt: order.paidAt || null,
             createdAt: order.createdAt,
             itemCount: Array.isArray(order.items)
               ? order.items.reduce(
@@ -344,10 +355,25 @@ export async function portalRequest(req: Request, path: string[], body: any) {
         },
       };
     }
+    if (action === 'admin/settings' && post) {
+      const clean = (value:unknown,host:string) => { if(!value)return ''; let url:URL; try{url=new URL(String(value));}catch{throw new BusinessError('Masukkan URL lengkap.');} if(url.protocol!=='https:' || ![host,'www.'+host].includes(url.hostname) || url.username || url.password)throw new BusinessError('Gunakan tautan HTTPS '+host); return url.toString(); };
+      const data={instagram:clean(body.instagram,'instagram.com'),tiktok:clean(body.tiktok,'tiktok.com')};
+      await sql`INSERT INTO portal_settings(id,data) VALUES('social',${sql.json(data)}) ON CONFLICT(id) DO UPDATE SET data=excluded.data`;
+      return {ok:true};
+    }
     if (action === 'admin/product' && post) {
       const original = defaults.find((p) => p.id === body.id);
       if (!original) throw new BusinessError('Produk tidak ditemukan.', 404);
+      let imageSrc=String(body.imageSrc || original.imageSrc || '');
+      if(imageSrc.startsWith('data:')) {
+        if(!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(imageSrc)||imageSrc.length>5700000)throw new BusinessError('Gambar maksimal 4 MB (JPG, PNG, WebP).');
+        try{imageSrc='data:image/webp;base64,'+(await photoProcessor(Buffer.from(imageSrc.split(',')[1],'base64'),{limitInputPixels:30000000}).rotate().resize(1000,1000,{fit:'contain'}).webp({quality:85}).toBuffer()).toString('base64');}catch{throw new BusinessError('Gambar tidak dapat diproses.');}
+      }else if(imageSrc && !imageSrc.startsWith('/') && !/^https:\/\//.test(imageSrc))throw new BusinessError('URL gambar tidak valid.');
+      const specs:Record<string,string>={};
+      for(const line of String(body.specsText||'').split('\n').filter(Boolean)){const at=line.indexOf(':');if(at<1)throw new BusinessError('Format spesifikasi: Nama: Nilai.');specs[text(line.slice(0,at),1,100)]=text(line.slice(at+1),1,300);}
+      if(!categories.includes(body.category))throw new BusinessError('Kategori tidak valid.');
       const data = {
+        category:body.category,imageSrc,specs,quote:body.quote===true,weight:num(body.weight||1000,1,1000000),
         name: text(body.name),
         model: text(body.model),
         price: num(body.price, 0, 1000000000),

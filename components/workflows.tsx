@@ -47,6 +47,42 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
+
+declare global {
+  interface Window {
+    snap?: {
+      pay: (
+        token: string,
+        callbacks: {
+          onSuccess: () => void;
+          onPending: () => void;
+          onError: () => void;
+          onClose: () => void;
+        },
+      ) => void;
+    };
+  }
+}
+
+function loadMidtransSnap(scriptUrl: string, clientKey: string) {
+  return new Promise<void>((resolve, reject) => {
+    if (window.snap) return resolve();
+    const existing = document.querySelector<HTMLScriptElement>('script[data-midtrans-snap]');
+    if (existing) {
+      existing.addEventListener('load', () => resolve(), { once: true });
+      existing.addEventListener('error', () => reject(new Error('Snap gagal dimuat.')), { once: true });
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = scriptUrl;
+    script.async = true;
+    script.dataset.midtransSnap = 'true';
+    script.dataset.clientKey = clientKey;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Snap gagal dimuat.'));
+    document.head.appendChild(script);
+  });
+}
 import {
   Table,
   TableHeader,
@@ -204,6 +240,7 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [order, setOrder] = useState<any>(null);
+  const [payment, setPayment] = useState<any>(null);
   const key = useRef('');
   useEffect(() => {
     if(s.profile)api('addresses').then(a=>{if(a.length)setAddress(a[0]);}).catch(()=>setError('Alamat belum dapat dimuat. Silakan coba lagi.'));
@@ -214,8 +251,8 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
   }, []);
   useEffect(() => {
     if (paymentId)
-      api('orders/' + paymentId)
-        .then(setOrder)
+      api('payments/' + paymentId)
+        .then((result) => { setOrder(result.order); setPayment(result.payment); })
         .catch((e) => setError(e.message));
   }, [paymentId]);
   useEffect(() => {
@@ -247,7 +284,61 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
       setBusy(false);
     }
   }
-  if (paymentId) return <main className="container page"><div className="panel empty"><LockKeyhole size={40}/><h1>Pembayaran online segera tersedia</h1><p>Hubungi tim KLIKFIBER untuk konfirmasi pesanan dan metode pembayaran.</p><Btn href="/penawaran">Hubungi tim</Btn></div></main>;
+  if (paymentId) {
+    const refresh = () => api('payments/' + paymentId).then((result) => {
+      setOrder(result.order);
+      setPayment(result.payment);
+      return result;
+    });
+    const openSnap = async () => {
+      setBusy(true);
+      setError('');
+      try {
+        const [config, created] = await Promise.all([
+          api('payments/midtrans/config'),
+          api('payments/midtrans/create', { orderId: paymentId }),
+        ]);
+        setPayment(created);
+        await loadMidtransSnap(config.scriptUrl, config.clientKey);
+        if (!window.snap) throw new Error('Snap belum tersedia.');
+        const check = async (message: string) => {
+          try { await refresh(); } finally { notify(message); }
+        };
+        window.snap.pay(created.snapToken, {
+          onSuccess: () => void check('Pembayaran diterima. Status sedang diverifikasi.'),
+          onPending: () => void check('Pembayaran masih menunggu penyelesaian.'),
+          onError: () => void check('Pembayaran gagal. Anda dapat mencoba kembali.'),
+          onClose: () => void check('Pembayaran ditutup. Pesanan tetap tersimpan.'),
+        });
+      } catch (e: any) {
+        setError(e.message || 'Pembayaran belum dapat dibuka.');
+      } finally {
+        setBusy(false);
+      }
+    };
+    if (!order) return <main className="container page"><Loading /></main>;
+    const paid = order.paymentStatus === 'paid';
+    return (
+      <main className="container page payment-page">
+        <section className="panel payment-card">
+          <LockKeyhole size={40}/>
+          <span className="kicker">PEMBAYARAN MIDTRANS</span>
+          <h1>{paid ? 'Pembayaran berhasil' : 'Selesaikan pembayaran'}</h1>
+          <p>Pesanan <strong>{order.number}</strong></p>
+          <div className="payment-total">{rupiah(order.total)}</div>
+          <dl className="payment-facts">
+            <div><dt>Status</dt><dd>{paid ? 'Lunas' : payment?.status === 'pending' ? 'Menunggu pembayaran' : payment?.status || 'Belum dimulai'}</dd></div>
+            <div><dt>Metode</dt><dd>{order.paymentType || payment?.paymentType || 'Pilih di Midtrans Snap'}</dd></div>
+            {order.paidAt && <div><dt>Tanggal bayar</dt><dd>{date(order.paidAt)} WIB</dd></div>}
+          </dl>
+          {error && <ErrorBox message={error}/>} 
+          {!paid && <Btn className="full" disabled={busy} onClick={openSnap}>{busy ? 'Menyiapkan…' : payment && ['failed','expired','cancelled'].includes(payment.status) ? 'Coba Bayar Lagi' : 'Bayar Sekarang'}<ArrowRight size={18}/></Btn>}
+          <Btn outline href="/akun/pesanan">Lihat Pesanan</Btn>
+          <p className="small muted">Status lunas hanya diperbarui setelah verifikasi server Midtrans.</p>
+        </section>
+      </main>
+    );
+  }
   if (!s.ready)
     return (
       <main className="container page">
@@ -620,6 +711,12 @@ function OrderView({ order, reload }: { order: any; reload: () => void }) {
             Ongkir: {rupiah(order.shippingCost)}
             <br />
             Diskon: − {rupiah(order.discount)}
+            <br />
+            Pembayaran: {order.paymentProvider || 'Belum dipilih'}
+            <br />
+            Status pembayaran: {order.paymentStatus || 'pending'}
+            {order.paymentType && <><br />Metode: {order.paymentType}</>}
+            {order.paidAt && <><br />Dibayar: {date(order.paidAt)} WIB</>}
           </p>
           <b>{rupiah(order.total)}</b>
         </div>

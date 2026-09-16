@@ -27,6 +27,9 @@ export type Product = {
   specs: Record<string, string>;
 };
 export const products: Product[] = [
+{id:'ucl-swift-k33a',name:'SWIFT K33A Fusion Splicer',model:'UCL SWIFT K33A',category:categories[1],price:0,stock:0,quote:true,image:0,imageSrc:'/images/fabeal-k33a.png',sourceUrl:'https://fabeal.co.id/',sourceLabel:'Katalog Fabeal',description:'Splicer SWIFT K33A untuk penyambungan serat optik. Hubungi sales untuk harga, stok, dan paket pembelian.',specs:{Model:'K33A',Merek:'SWIFT'}},
+{id:'ucl-swift-kf4a',name:'SWIFT KF4-A Fusion Splicer',model:'UCL SWIFT KF4-A',category:categories[1],price:0,stock:0,quote:true,image:0,imageSrc:'/images/fabeal-kf4a.jpg',sourceUrl:'https://fabeal.co.id/',sourceLabel:'Katalog Fabeal',description:'Splicer SWIFT KF4-A untuk penyambungan serat optik. Hubungi sales untuk harga, stok, dan paket pembelian.',specs:{Model:'KF4-A',Merek:'SWIFT'}},
+
   {
     id: 'ucl-swift-k33',
     name: 'SWIFT K33 Fusion Splicer',

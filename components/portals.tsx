@@ -5,7 +5,7 @@ import { createBrowserClient } from '@supabase/ssr';
 import { authUrl, authKey } from '@/lib/auth/config';
 import { api, useStore } from './store';
 import CustomerAuth from './customer-auth';
-import { rupiah } from '@/lib/catalog';
+import { rupiah, categories } from '@/lib/catalog';
 import {
   Bell,
   Boxes,
@@ -41,7 +41,7 @@ function BannerManager({
 }: {
   banners: any[];
   busy: boolean;
-  onSave: (banner: any) => Promise<void>;
+  onSave: (banner: any) => Promise<boolean>;
 }) {
   const [draft, setDraft] = useState<any>(null);
   const [fileError, setFileError] = useState('');
@@ -60,7 +60,7 @@ function BannerManager({
       <div className="portal-heading">
         <div>
           <h2>Banner homepage</h2>
-          <p>Dua banner aktif yang dapat digeser oleh pengunjung.</p>
+          <p>Empat slide, masing-masing dengan gambar desktop dan mobile.</p>
         </div>
       </div>
       <div className="banner-admin-grid">
@@ -84,13 +84,12 @@ function BannerManager({
       {draft && (
         <section className="panel portal-editor banner-editor" id="portal-editor" aria-label="Editor banner">
           <div className="portal-heading">
-            <div><h2>Edit {draft.id === 'hero-1' ? 'banner 1' : 'banner 2'}</h2><p>Gambar otomatis dipotong ke ukuran yang tepat saat disimpan.</p></div>
+            <div><h2>Edit {'banner ' + draft.id.replace('hero-','')}</h2><p>Gambar otomatis dipotong ke ukuran yang tepat saat disimpan.</p></div>
             <button className="btn outline" onClick={() => setDraft(null)}>Tutup</button>
           </div>
           <form className="stack" onSubmit={async (event) => {
             event.preventDefault();
-            await onSave(draft);
-            setDraft(null);
+            if(await onSave(draft)) setDraft(null);
           }}>
             <div className="banner-upload-grid">
               <label className="banner-upload">
@@ -233,6 +232,10 @@ function OrdersTable({ orders }: { orders: any[] }) {
             <span>
               {order.name} · {order.itemCount} item
             </span>
+            <small>
+              {String(order.paymentProvider || 'legacy').toUpperCase()}
+              {order.paymentType ? ` · ${order.paymentType}` : ''}
+            </small>
           </div>
           <div className="order-value">
             <strong>{rupiah(order.total)}</strong>
@@ -406,8 +409,10 @@ export function AdminPortal() {
       await api('portal/admin/' + path, body);
       setEdit(null);
       await load();
+      return true;
     } catch (e: any) {
       setError(e.message);
+      return false;
     } finally {
       setBusy(false);
     }
@@ -480,14 +485,16 @@ export function AdminPortal() {
     ['orders', 'Pesanan', ClipboardList],
     ['sales', 'Sales & Referral', UsersRound],
     ['promos', 'Voucher Promo', Tag],
+    ['settings','Media Sosial',UsersRound],
   ];
   const pageTitle: Record<string, [string, string]> = {
     dashboard: ['Dashboard', 'Pantau performa toko dan operasional terbaru.'],
     products: ['Produk', 'Kelola harga, stok, dan informasi katalog.'],
-    banners: ['Banner Homepage', 'Kelola dua banner desktop dan mobile.'],
+    banners: ['Banner Homepage', 'Kelola empat banner desktop dan mobile.'],
     orders: ['Pesanan', 'Pantau transaksi pelanggan dari satu tempat.'],
     sales: ['Sales & Referral', 'Setujui sales dan atur batas diskonnya.'],
     promos: ['Voucher Promo', 'Kelola program promo untuk pelanggan.'],
+    settings:['Media Sosial','Atur Instagram dan TikTok yang ditampilkan di footer.'],
   };
   const changeTab = (value: string) => {
     setTab(value);
@@ -620,6 +627,7 @@ export function AdminPortal() {
             </p>
           )}
           {tab === 'dashboard' && <AdminOverview data={data} />}
+          {tab === 'settings' && <section className="panel"><h2>Terhubung dengan pelanggan</h2><p>Isi tautan akun resmi. Kosongkan untuk menyembunyikannya dari footer.</p><form className="stack" onSubmit={e=>{e.preventDefault();void action('settings',formData(e.currentTarget));}}><label>Instagram<input type="url" name="instagram" placeholder="https://www.instagram.com/akun-anda/" defaultValue={data.settings?.instagram || ''}/></label><label>TikTok<input type="url" name="tiktok" placeholder="https://www.tiktok.com/@akun-anda" defaultValue={data.settings?.tiktok || ''}/></label><button className="btn" disabled={busy}>Simpan media sosial</button></form></section>}
           {tab === 'products' && (
             <section className="panel">
               <h2>Katalog toko</h2>
@@ -853,6 +861,8 @@ export function AdminPortal() {
                     ...f,
                     id: edit.id,
                     active: f.active === 'on',
+                    quote: f.quote === 'on',
+                    imageSrc: edit.imageSrc,
                   });
                 }}
               >
@@ -888,6 +898,11 @@ export function AdminPortal() {
                         defaultValue={edit.stock}
                       />
                     </label>
+                    <label>Kategori<select name="category" defaultValue={edit.category}>{categories.slice(1).map(category=><option key={category}>{category}</option>)}</select></label>
+                    <label>Berat pengiriman (gram)<input name="weight" type="number" min="1" max="1000000" defaultValue={edit.weight || 1000} required/></label>
+                    <label className="product-image-editor">Foto produk<img src={edit.imageSrc} alt="Pratinjau produk" style={{width:150,height:150,objectFit:'contain'}}/><input type="file" accept="image/png,image/jpeg,image/webp" onChange={async e=>{const file=e.target.files?.[0];if(file)try{const imageSrc=await readImage(file);setEdit((current:any)=>({...current,imageSrc}));}catch(error:any){setError(error.message);}}}/></label>
+                    <label><input type="checkbox" name="quote" defaultChecked={edit.quote}/> Harga melalui penawaran sales</label>
+                    <label>Spesifikasi (satu per baris, Nama: Nilai)<textarea name="specsText" rows={6} maxLength={6000} defaultValue={Object.entries(edit.specs || {}).map(([k,v])=>`${k}: ${v}`).join('\n')}/></label>
                     <label>
                       Deskripsi
                       <textarea
