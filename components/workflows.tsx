@@ -202,7 +202,7 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
   useEffect(() => {
     setQuote(null);
     key.current = '';
-  }, [s.cart, applied]);
+  }, [s.cart]);
   const subtotal = s.cart.reduce(
     (n, item) => n + products.find((p) => p.id === item.id)!.price * item.qty,
     0,
@@ -375,6 +375,7 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
                   const result = await api('referrals/validate', { code });
                   setCode(result.code);
                   setApplied(result.code);
+                  setQuote(null);
                   localStorage.setItem('klikfiber-referral', result.code);
                   notify(`Kode aktif · diskon ${result.percent}%`);
                 } catch (e: any) {
