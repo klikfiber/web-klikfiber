@@ -4,6 +4,7 @@ import Store from '@/components/store';
 import './globals.css';
 import './playful.css';
 import './portals.css';
+import './shopping.css';
 export const metadata: Metadata = {
   title: 'Klikfiber.id — Klik, sambung, beres!',
   description:

@@ -9,7 +9,7 @@ import {
 } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import CustomerAuth from './customer-auth';
+import ProductGallery from './product-gallery';
 import {AdminPortal,SalesArea} from './portals';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -57,7 +57,7 @@ import {
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
-import { Toaster, toast } from '@/components/ui/toast';
+
 import {
   products,
   categories,
@@ -86,15 +86,16 @@ export async function api(path: string, body?: unknown) {
     throw new Error(j.message || 'Terjadi kendala. Silakan coba lagi.');
   return j.data;
 }
-export const notify = (title: string, type = 'success') =>
-  toast.add({ title, type });
+export const notify = (title: string, type = 'success') => {
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('klikfiber-notice', { detail: { title, type } }));
+};
 export type State = {
   products: Product[];
   cart: CartItem[];
   favorites: string[];
   profile: any;
   ready: boolean;
-  add: (p: Product, qty?: number) => void;
+  add: (p: Product, qty?: number) => boolean;
   setQty: (id: string, qty: number) => void;
   favorite: (id: string) => void;
   login: () => void;
@@ -271,7 +272,7 @@ export function ProductCard({ p }: { p: Product }) {
               ? 'Konsultasikan paket'
               : p.stock
                 ? `${p.stock} ${p.unit || 'unit'} tersedia`
-                : 'Hubungi tim kami'}
+                : 'Stok habis'}
           </span>
           <button
             aria-label={
@@ -655,7 +656,7 @@ function Detail({ id }: { id: string }) {
   const s = useStore();
   const router = useRouter();
   const [qty, setQty] = useState(1);
-  const [zoom, setZoom] = useState(false);
+
   if (!p)
     return (
       <main className="container empty">
@@ -675,21 +676,12 @@ function Detail({ id }: { id: string }) {
       </div>
       <div className="detail-grid">
         <div>
-          <button
-            className="gallery"
-            aria-label="Perbesar foto produk"
-            onClick={() => setZoom(true)}
-          >
-            <ProductImage p={p} large />
-            <span>
-              <Search size={18} /> Perbesar foto
-            </span>
-          </button>
+          {p.imageSrc || p.gallery?.length ? <ProductGallery key={p.id} product={p} /> : <ProductImage p={p} large />}
         </div>
         <div className="detail-info">
           <span className="kicker">{p.category}</span>
           <h1>
-            {p.name} {p.model}
+            {p.name}
           </h1>
           <div className="detail-meta">
             <span>SKU: {p.model}</span>
@@ -705,7 +697,7 @@ function Detail({ id }: { id: string }) {
           <div className="info-strip">
             <ShieldCheck size={23} />
             <span>
-              Garansi dan isi paket diinformasikan pada penawaran final.
+              Pilih jumlah produk, lalu lengkapi alamat dan pengiriman saat checkout.
             </span>
           </div>
           <strong>Jumlah</strong>
@@ -730,17 +722,16 @@ function Detail({ id }: { id: string }) {
               className="full"
               disabled={!p.stock && !p.quote}
               onClick={() => {
-                s.add(p, qty);
-                router.push('/checkout');
+                if (s.add(p, qty)) router.push('/checkout');
               }}
             >
               Beli Sekarang <ArrowRight size={18} />
             </Btn>
           )}
-          <Link className="quote-link" href={'/penawaran?produk=' + p.id}>
+          {p.quote && <Link className="quote-link" href={'/penawaran?produk=' + p.id}>
             <FileText size={18} /> Minta Penawaran Proyek{' '}
             <ChevronRight size={18} />
-          </Link>
+          </Link>}
           {p.sourceUrl && (
             <a
               className="source-link"
@@ -770,8 +761,8 @@ function Detail({ id }: { id: string }) {
           <h3>Tentang {p.name}</h3>
           <p>{p.description}</p>
           <p>
-            Diskusikan kebutuhan instalasi, jumlah, dan tujuan pengiriman
-            bersama tim KLIKFIBER melalui permintaan penawaran proyek.
+            Pilih jumlah sesuai kebutuhan Anda. Ongkos kirim dihitung berdasarkan
+            alamat tujuan dan layanan pengiriman yang dipilih saat checkout.
           </p>
         </TabsContent>
         <TabsContent value="specs">
@@ -817,13 +808,7 @@ function Detail({ id }: { id: string }) {
             ))}
         </div>
       </section>
-      <Dialog open={zoom} onOpenChange={setZoom}>
-        <DialogContent className="zoom-dialog">
-          <DialogTitle>{p.name}</DialogTitle>
-          <DialogDescription>Foto ilustrasi produk</DialogDescription>
-          <ProductImage p={p} large />
-        </DialogContent>
-      </Dialog>
+
       <div className="mobile-buy mobile">
         <strong>{p.quote && !p.price ? 'Hubungi sales' : rupiah(p.price)}</strong>
         <Btn
@@ -849,10 +834,12 @@ export default function Store() {
   const [favorites, setFavorites] = useState<string[]>([]);
   const [profile, setProfile] = useState<any>(null);
   const [ready, setReady] = useState(false);
-  const [loginOpen, setLoginOpen] = useState(false);
   const [menu, setMenu] = useState(false);
   const [search, setSearch] = useState('');
   const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<{title:string;type:string}|null>(null);
+  useEffect(() => { const receive = (event: Event) => setNotice((event as CustomEvent).detail); window.addEventListener('klikfiber-notice', receive); return () => window.removeEventListener('klikfiber-notice', receive); }, []);
+  useEffect(() => { setNotice(null); }, [path]);
   useEffect(() => {
     const referral = (query.get('ref') || '').trim().toUpperCase();
     if (/^[A-Z0-9-]{4,24}$/.test(referral)) localStorage.setItem('klikfiber-referral', referral);
@@ -908,25 +895,31 @@ export default function Store() {
     ready,
     refresh,
     clearCart: () => setCart([]),
-    login: () => setLoginOpen(true),
+    login: () => router.push('/akun'),
     add: (p, qty = 1) => {
       if (!profile) {
-        setLoginOpen(true);
-        notify('Masuk atau daftar untuk menambahkan produk', 'info');
-        return;
+        router.push('/akun');
+
+        return false;
       }
-      if (!p.stock || p.quote) return;
+      if (!p.stock || p.quote) return false;
+      const quantity = cart.find(x => x.id === p.id)?.qty || 0;
+      if (quantity + qty > Math.min(99, p.stock)) {
+        notify('Jumlah melebihi stok tersedia', 'error');
+        return false;
+      }
       setCart((c) => {
         const previous = c.find((x) => x.id === p.id)?.qty || 0;
         if (previous + qty > Math.min(99, p.stock)) {
           notify('Jumlah melebihi stok tersedia', 'error');
           return c;
         }
-        notify('Produk ditambahkan ke keranjang');
+
         return previous
           ? c.map((x) => (x.id === p.id ? { ...x, qty: x.qty + qty } : x))
           : [...c, { id: p.id, qty }];
       });
+      return true;
     },
     setQty: (id, qty) =>
       setCart((c) =>
@@ -939,14 +932,14 @@ export default function Store() {
                     qty: Math.min(
                       qty,
                       99,
-                      products.find((p) => p.id === id)!.stock,
+                      catalog.find((p) => p.id === id)?.stock || 0,
                     ),
                   }
                 : x,
             ),
       ),
     favorite: (id) => {
-      if(!profile){setLoginOpen(true);return;}
+      if(!profile){router.push('/akun');return;}
       const next=favorites.includes(id)?favorites.filter(x=>x!==id):[...favorites,id];
       setFavorites(next);
       api('portal/customer/favorites',{ids:next}).catch(()=>{setFavorites(favorites);notify('Wishlist belum tersimpan. Coba lagi.','error');});
@@ -955,7 +948,8 @@ export default function Store() {
   const count = cart.reduce((n, x) => n + x.qty, 0);
   return (
     <Context.Provider value={state}>
-      <Toaster>
+      <>
+        {notice && <div className="store-inline-notice container" role={notice.type === 'error' ? 'alert' : 'status'}><span>{notice.title}</span><button type="button" aria-label="Tutup pesan" onClick={() => setNotice(null)}><X size={16}/></button></div>}
         <a href="#main" className="skip-link">
           Lewati ke konten
         </a>
@@ -1127,16 +1121,8 @@ export default function Store() {
             </nav>
           </SheetContent>
         </Sheet>
-        <Dialog open={loginOpen} onOpenChange={setLoginOpen}>
-          <DialogContent className="login-dialog">
-            <DialogTitle>Selamat datang di KLIKFIBER</DialogTitle>
-            <DialogDescription>Masuk atau daftar untuk melanjutkan pembelian dan mengelola pesanan.</DialogDescription>
-            <CustomerAuth done={async()=>{await refresh();setLoginOpen(false);}} />
-          </DialogContent>
-        </Dialog>
-      </Toaster>
+
+      </>
     </Context.Provider>
   );
 }
-
-

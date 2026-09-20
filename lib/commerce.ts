@@ -1,4 +1,5 @@
 import { products, shipping, type CartItem } from './catalog';
+import { selectedRegion } from './regions';
 export class BusinessError extends Error {
   constructor(
     message: string,
@@ -23,21 +24,17 @@ export function validAddress(a: any) {
     a.street.length > 250
   )
     throw new BusinessError('Alamat lengkap harus 10–250 karakter.');
-  if (
-    typeof a.city !== 'string' ||
-    a.city.trim().length < 2 ||
-    a.city.length > 100
-  )
-    throw new BusinessError('Kota tujuan wajib diisi.');
-  if (!/^\d{5}$/.test(a.postal || ''))
-    throw new BusinessError('Kode pos harus lima digit.');
+  const region = selectedRegion(String(a.villageId || ''));
+  if (!region) throw new BusinessError('Pilih provinsi, kota/kabupaten, kecamatan, dan kelurahan/desa tujuan.');
+  for (const field of ['provinceId', 'cityId', 'districtId', 'postal'] as const) {
+    if (a[field] !== region[field]) throw new BusinessError('Wilayah dan kode pos tidak sesuai. Pilih ulang alamat tujuan.');
+  }
   return {
     name: a.name.trim(),
     phone: a.phone.replace(/^0/, '+62').replace(/^62/, '+62'),
     street: a.street.trim(),
-    city: a.city.trim(),
-    postal: a.postal,
-    company: String(a.company || '').slice(0, 150),
+    ...region,
+    landmark: String(a.landmark || '').trim().slice(0, 150),
   };
 }
 export function priceCart(
@@ -51,7 +48,7 @@ export function priceCart(
   const seen = new Set();
   const snapshot = items.map((item) => {
     const p = catalog.find((p) => p.id === item.id);
-    if (!p || p.quote || !p.stock)
+    if (!p || p.quote || !p.stock || p.price <= 0)
       throw new BusinessError(
         'Produk tidak dapat dibeli langsung. Gunakan penawaran proyek.',
       );
@@ -59,6 +56,7 @@ export function priceCart(
       !Number.isInteger(item.qty) ||
       item.qty < 1 ||
       item.qty > 99 ||
+      item.qty > p.stock ||
       seen.has(item.id)
     )
       throw new BusinessError(

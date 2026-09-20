@@ -296,7 +296,7 @@ async function createMidtransPayment(owner: string, profile: any, order: any) {
         shipping_address: {
           first_name: address.name,
           phone: address.phone,
-          address: address.street,
+          address: [address.street, address.village, address.district, address.province, address.landmark].filter(Boolean).join(', '),
           city: address.city,
           postal_code: address.postal,
           country_code: 'IDN',
@@ -552,7 +552,7 @@ async function handle(req: Request) {
       : null;
     if (!campaign)
       throw new BusinessError('Kode referral sales tidak valid atau belum aktif.');
-    const totals = priceCart(body.items, body.shipping, campaign, products);
+    const totals = priceCart(body.items, 'regular', campaign, products);
     const apiKey = process.env.BITESHIP_API_KEY;
     if (!apiKey) throw new BusinessError('Koneksi tarif Biteship belum diaktifkan.', 503);
     const rateResponse = await fetch('https://api.biteship.com/v1/rates/couriers', {
@@ -566,6 +566,7 @@ async function handle(req: Request) {
     const shippingOptions = rateResult.pricing.sort((a:any,b:any)=>a.price-b.price).map((x:any)=>({ id:`${x.courier_code}:${x.courier_service_code}`, name:`${x.courier_name} ${x.courier_service_name}`, cost:x.price, eta:x.duration }));
     const selectedShipping = shippingOptions.find((x:any)=>x.id===body.shipping) || shippingOptions[0];
     totals.shippingCost = selectedShipping.cost;
+    totals.shipping = selectedShipping.id;
     totals.total = totals.subtotal - totals.discount + selectedShipping.cost;
     for (const p of totals.items) {
       const stock = await db()
@@ -589,6 +590,15 @@ async function handle(req: Request) {
     };
     await save(owner, 'checkout', q).run();
     return respond(q);
+  }
+  if (r === 'checkout/shipping' && isPost) {
+    const q = await record(owner, str(body.quoteId, 1, 100), 'checkout');
+    if (Date.parse(q.expiresAt) < Date.now()) throw new BusinessError('Ongkir kedaluwarsa. Periksa alamat dan ongkir kembali.', 409);
+    const selected = q.shippingOptions?.find((option: any) => option.id === body.shipping);
+    if (!selected) throw new BusinessError('Pilih layanan pengiriman yang tersedia.');
+    const updated = { ...q, shipping: selected.id, selectedShipping: selected, shippingCost: selected.cost, total: q.subtotal - q.discount + selected.cost };
+    await update(owner, updated).run();
+    return respond(updated);
   }
   if (r === 'orders' && !isPost) return respond(await records(owner, 'order'));
   if (r === 'orders' && isPost) {
@@ -743,7 +753,7 @@ async function handle(req: Request) {
             })[c]!,
         );
       return new Response(
-        `<!doctype html><html lang="id"><meta charset="utf-8"><title>Invoice ${esc(o.number)}</title><style>body{font:16px Arial;color:#0b1f3a;max-width:850px;margin:50px auto;padding:25px}h1{color:#0098b8}table{width:100%;border-collapse:collapse}td,th{padding:15px;text-align:left;border-bottom:1px solid #ddd}</style><h1>KLIKFIBER</h1><h2>Invoice Penjualan</h2><p>${esc(o.number)} · ${esc(o.paidAt)}</p><p>${esc(o.address.name)}<br>${esc(o.address.street)}, ${esc(o.address.city)}</p><table><tr><th>Produk</th><th>Jumlah</th><th>Harga</th></tr>${o.items.map((p: any) => `<tr><td>${esc(p.name)}</td><td>${p.qty}</td><td>Rp ${(p.qty * p.price).toLocaleString('id-ID')}</td></tr>`).join('')}</table><p>Subtotal: Rp ${o.subtotal.toLocaleString('id-ID')}<br>Diskon: Rp ${o.discount.toLocaleString('id-ID')}<br>Ongkir: Rp ${o.shippingCost.toLocaleString('id-ID')}</p><h2>Total Rp ${o.total.toLocaleString('id-ID')}</h2><p>klikfiber@gmail.com</p></html>`,
+        `<!doctype html><html lang="id"><meta charset="utf-8"><title>Invoice ${esc(o.number)}</title><style>body{font:16px Arial;color:#0b1f3a;max-width:850px;margin:50px auto;padding:25px}h1{color:#0098b8}table{width:100%;border-collapse:collapse}td,th{padding:15px;text-align:left;border-bottom:1px solid #ddd}</style><h1>KLIKFIBER</h1><h2>Invoice Penjualan</h2><p>${esc(o.number)} · ${esc(o.paidAt)}</p><p>${esc(o.address.name)}<br>${esc([o.address.street, o.address.village, o.address.district, o.address.city, o.address.province, o.address.postal, o.address.landmark].filter(Boolean).join(', '))}</p><table><tr><th>Produk</th><th>Jumlah</th><th>Harga</th></tr>${o.items.map((p: any) => `<tr><td>${esc(p.name)}</td><td>${p.qty}</td><td>Rp ${(p.qty * p.price).toLocaleString('id-ID')}</td></tr>`).join('')}</table><p>Subtotal: Rp ${o.subtotal.toLocaleString('id-ID')}<br>Diskon: Rp ${o.discount.toLocaleString('id-ID')}<br>Ongkir: Rp ${o.shippingCost.toLocaleString('id-ID')}</p><h2>Total Rp ${o.total.toLocaleString('id-ID')}</h2><p>klikfiber@gmail.com</p></html>`,
         {
           headers: {
             'Content-Type': 'text/html; charset=utf-8',

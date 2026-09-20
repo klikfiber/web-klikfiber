@@ -46,6 +46,13 @@ export async function initPortal() {
       await tx`CREATE TABLE IF NOT EXISTS portal_banners (id TEXT PRIMARY KEY, title TEXT NOT NULL, accent TEXT NOT NULL, subtitle TEXT NOT NULL, cta TEXT NOT NULL, href TEXT NOT NULL, desktop_image TEXT NOT NULL, mobile_image TEXT NOT NULL, sort_order INT NOT NULL DEFAULT 0, active BOOLEAN NOT NULL DEFAULT true)`;
       await tx`CREATE TABLE IF NOT EXISTS portal_settings (id TEXT PRIMARY KEY, data JSONB NOT NULL)`;
       await tx`CREATE TABLE IF NOT EXISTS portal_customers (id TEXT PRIMARY KEY, name TEXT NOT NULL, avatar TEXT NOT NULL DEFAULT 'blue', profile_complete BOOLEAN NOT NULL DEFAULT true)`;
+      const priceRevision = await tx`INSERT INTO portal_settings(id,data) VALUES('splicer-prices-2026-09-20','{"applied":true}') ON CONFLICT(id) DO NOTHING RETURNING id`;
+      if (priceRevision.length) {
+        for (const id of ['ucl-swift-k33a', 'ucl-swift-kf4a']) {
+          await tx`INSERT INTO portal_products(id,data) VALUES(${id},'{"price":20000000,"quote":false}') ON CONFLICT(id) DO UPDATE SET data=portal_products.data || excluded.data`;
+        }
+        await tx`UPDATE portal_products SET data=data || '{"quote":false}'::jsonb WHERE id IN ('ucl-swift-k33','ucl-swift-kf4')`;
+      }
       for (const table of [
         'portal_admin',
         'portal_sessions',
@@ -369,14 +376,25 @@ export async function portalRequest(req: Request, path: string[], body: any) {
         if(!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(imageSrc)||imageSrc.length>5700000)throw new BusinessError('Gambar maksimal 4 MB (JPG, PNG, WebP).');
         try{imageSrc='data:image/webp;base64,'+(await photoProcessor(Buffer.from(imageSrc.split(',')[1],'base64'),{limitInputPixels:30000000}).rotate().resize(1000,1000,{fit:'contain'}).webp({quality:85}).toBuffer()).toString('base64');}catch{throw new BusinessError('Gambar tidak dapat diproses.');}
       }else if(imageSrc && !imageSrc.startsWith('/') && !/^https:\/\//.test(imageSrc))throw new BusinessError('URL gambar tidak valid.');
+      if (body.gallery !== undefined && (!Array.isArray(body.gallery) || body.gallery.length > 7)) throw new BusinessError('Maksimal 7 foto tambahan.');
+      const gallery: string[] = [];
+      for (const entry of body.gallery || []) {
+        let src = String(entry);
+        if (src.startsWith('data:')) {
+          if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(src) || src.length > 5700000) throw new BusinessError('Setiap foto maksimal 4 MB (JPG, PNG, WebP).');
+          try { src = 'data:image/webp;base64,' + (await photoProcessor(Buffer.from(src.split(',')[1], 'base64'), { limitInputPixels: 30000000 }).rotate().resize(1200,1200,{fit:'contain'}).webp({quality:85}).toBuffer()).toString('base64'); }
+          catch { throw new BusinessError('Foto galeri tidak dapat diproses.'); }
+        } else if (!/^\/(?!\/)/.test(src) && !/^https:\/\//.test(src)) throw new BusinessError('URL foto galeri tidak valid.');
+        if (src !== imageSrc && !gallery.includes(src)) gallery.push(src);
+      }
       const specs:Record<string,string>={};
       for(const line of String(body.specsText||'').split('\n').filter(Boolean)){const at=line.indexOf(':');if(at<1)throw new BusinessError('Format spesifikasi: Nama: Nilai.');specs[text(line.slice(0,at),1,100)]=text(line.slice(at+1),1,300);}
       if(!categories.includes(body.category))throw new BusinessError('Kategori tidak valid.');
       const data = {
-        category:body.category,imageSrc,specs,quote:body.quote===true,weight:num(body.weight||1000,1,1000000),
+        category:body.category,imageSrc,gallery,specs,quote:original.category === 'Fusion Splicer' ? false : body.quote===true,weight:num(body.weight||1000,1,1000000),
         name: text(body.name),
         model: text(body.model),
-        price: num(body.price, 0, 1000000000),
+        price: num(body.price, original.category === 'Fusion Splicer' ? 1 : 0, 1000000000),
         stock: num(body.stock, 0, 1000000),
         description: text(body.description, 5, 5000),
       };

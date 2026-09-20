@@ -29,7 +29,24 @@ const readImage = (file: File) =>
       return;
     }
     const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
+    reader.onload = () => {
+      const image = new Image();
+      image.onerror = () => reject(new Error('Format gambar tidak dapat dibaca. Gunakan JPG, PNG, atau WebP.'));
+      image.onload = () => {
+        const scale = Math.min(1, 1920 / Math.max(image.width, image.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(image.width * scale));
+        canvas.height = Math.max(1, Math.round(image.height * scale));
+        const context = canvas.getContext('2d');
+        if (!context) { reject(new Error('Gambar tidak dapat diproses.')); return; }
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        let result = canvas.toDataURL('image/webp', 0.86);
+        if (result.length > 1300000) result = canvas.toDataURL('image/webp', 0.65);
+        if (result.length > 1300000) { reject(new Error('Gambar terlalu besar. Gunakan foto dengan resolusi lebih kecil.')); return; }
+        resolve(result);
+      };
+      image.src = String(reader.result);
+    };
     reader.onerror = () => reject(new Error('Gambar tidak dapat dibaca.'));
     reader.readAsDataURL(file);
   });
@@ -98,7 +115,7 @@ function BannerManager({
                 <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void pick('desktopImage', event.target.files?.[0])} />
               </label>
               <label className="banner-upload mobile-preview">
-                <span><strong>Versi mobile</strong><small>800 × 900 px · rasio 8:9 · JPG, PNG, atau WebP</small></span>
+                <span><strong>Versi mobile</strong><small>800 × 400 px · rasio 2:1 · JPG, PNG, atau WebP</small></span>
                 <img src={draft.mobileImage} alt="Pratinjau banner mobile" />
                 <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void pick('mobileImage', event.target.files?.[0])} />
               </label>
@@ -863,6 +880,7 @@ export function AdminPortal() {
                     active: f.active === 'on',
                     quote: f.quote === 'on',
                     imageSrc: edit.imageSrc,
+                    gallery: edit.gallery || [],
                   });
                 }}
               >
@@ -901,7 +919,8 @@ export function AdminPortal() {
                     <label>Kategori<select name="category" defaultValue={edit.category}>{categories.slice(1).map(category=><option key={category}>{category}</option>)}</select></label>
                     <label>Berat pengiriman (gram)<input name="weight" type="number" min="1" max="1000000" defaultValue={edit.weight || 1000} required/></label>
                     <label className="product-image-editor">Foto produk<img src={edit.imageSrc} alt="Pratinjau produk" style={{width:150,height:150,objectFit:'contain'}}/><input type="file" accept="image/png,image/jpeg,image/webp" onChange={async e=>{const file=e.target.files?.[0];if(file)try{const imageSrc=await readImage(file);setEdit((current:any)=>({...current,imageSrc}));}catch(error:any){setError(error.message);}}}/></label>
-                    <label><input type="checkbox" name="quote" defaultChecked={edit.quote}/> Harga melalui penawaran sales</label>
+                    <div className="product-gallery-editor"><strong>Galeri foto produk</strong><p>Tambahkan hingga 7 foto. Foto utama ditampilkan paling awal. JPG, PNG, WebP.</p><div className="admin-gallery-thumbs">{(edit.gallery || []).map((src:string,index:number)=><div key={index}><img src={src} alt={'Foto tambahan '+(index+1)}/><button type="button" aria-label={'Hapus foto tambahan '+(index+1)} onClick={()=>setEdit((current:any)=>({...current,gallery:current.gallery.filter((_:string,i:number)=>i!==index)}))}>Hapus</button></div>)}</div><input type="file" accept="image/png,image/jpeg,image/webp" multiple disabled={(edit.gallery || []).length>=7} onChange={async e=>{const files=Array.from(e.target.files || []);if(files.length+(edit.gallery || []).length>7){setError('Maksimal 7 foto tambahan.');return;}try{const gallery=await Promise.all(files.map(readImage));setEdit((current:any)=>({...current,gallery:[...(current.gallery || []),...gallery]}));}catch(error:any){setError(error.message);}e.target.value='';}}/></div>
+                    {edit.category !== 'Fusion Splicer' && <label><input type="checkbox" name="quote" defaultChecked={edit.quote}/> Harga melalui penawaran sales</label>}
                     <label>Spesifikasi (satu per baris, Nama: Nilai)<textarea name="specsText" rows={6} maxLength={6000} defaultValue={Object.entries(edit.specs || {}).map(([k,v])=>`${k}: ${v}`).join('\n')}/></label>
                     <label>
                       Deskripsi

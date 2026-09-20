@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import AddressFields, { initialAddress } from './address-fields';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
 import { authUrl, authKey } from '@/lib/auth/config';
@@ -165,63 +166,6 @@ function LoginGate() {
       <h1>{area ? `Masuk ${area} Area` : 'Selamat datang di KLIKFIBER'}</h1>
       <p>{area === 'Admin' ? 'Masuk dengan akun pengelola yang telah diberi akses.' : area === 'Sales' ? 'Kelola referral dan pantau peluang penjualan Anda.' : 'Masuk atau daftar untuk melanjutkan.'}</p>
       <CustomerAuth done={async () => { await store.refresh(); }} />
-    </div>
-  );
-}
-const initialAddress = {
-  name: '',
-  phone: '',
-  city: 'Bekasi',
-  postal: '17113',
-  street: '',
-  company: '',
-};
-function AddressFields({
-  value,
-  onChange,
-}: {
-  value: any;
-  onChange: (v: any) => void;
-}) {
-  return (
-    <div className="form-grid">
-      {[
-        ['name', 'Nama penerima', 'text'],
-        ['phone', 'Nomor telepon', 'tel'],
-        ['city', 'Kota / kabupaten', 'text'],
-        ['postal', 'Kode pos', 'text'],
-        ['company', 'Perusahaan (opsional)', 'text'],
-      ].map(([key, label, type]) => (
-        <label key={key}>
-          {label}
-          <input
-            required={key !== 'company'}
-            name={key}
-            type={type}
-            value={value[key] || ''}
-            maxLength={key === 'postal' ? 5 : 100}
-            pattern={
-              key === 'postal'
-                ? '[0-9]{5}'
-                : key === 'phone'
-                  ? '[+0-9]{9,16}'
-                  : undefined
-            }
-            minLength={key === 'name' ? 2 : undefined}
-            onChange={(e) => onChange({ ...value, [key]: e.target.value })}
-          />
-        </label>
-      ))}
-      <label className="span-2">
-        Alamat lengkap
-        <textarea
-          required
-          minLength={10}
-          maxLength={250}
-          value={value.street}
-          onChange={(e) => onChange({ ...value, street: e.target.value })}
-        />
-      </label>
     </div>
   );
 }
@@ -510,11 +454,15 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
               </p>
               <RadioGroup
                 value={ship}
-                onValueChange={(v) => {
-                  const id = String(v);
-                  setShip(id);
-                  const option = quote?.shippingOptions?.find((x:any)=>x.id===id);
-                  if (option) setQuote((q:any)=>({...q, selectedShipping:option, shippingCost:option.cost, total:q.subtotal-q.discount+option.cost}));
+                disabled={busy}
+                onValueChange={async (v) => {
+                  if (!quote || busy) return;
+                  setBusy(true); setError('');
+                  try {
+                    const updated = await api('checkout/shipping', { quoteId: quote.id, shipping: String(v) });
+                    setQuote(updated); setShip(updated.selectedShipping.id);
+                  } catch (e: any) { setError(e.message); }
+                  finally { setBusy(false); }
                 }}
                 className="shipping-options"
               >
@@ -713,7 +661,8 @@ function OrderView({ order, reload }: { order: any; reload: () => void }) {
             <br />
             {order.address.street}
             <br />
-            {order.address.city} {order.address.postal}
+            {[order.address.village, order.address.district, order.address.city, order.address.province, order.address.postal].filter(Boolean).join(', ')}
+            {order.address.landmark && <><br />{order.address.landmark}</>}
             <br />
             {order.address.phone}
           </p>

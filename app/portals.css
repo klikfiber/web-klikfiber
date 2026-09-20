@@ -893,7 +893,7 @@
 }
 .banner-upload.mobile-preview img {
   width: min(180px, 100%);
-  aspect-ratio: 8 / 9;
+  aspect-ratio: 2 / 1;
 }
 .banner-copy-grid label {
   display: grid;
