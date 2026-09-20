@@ -474,9 +474,9 @@ async function handle(req: Request) {
       const dimensions = product.dimensions || { length: 30, width: 25, height: 20 };
       return { name: product.name, description: product.description, sku: product.model, category: 'electronic', value: product.price, quantity: integer(item.qty, 1, 100), weight: product.weight || 1000, ...dimensions };
     });
-    const response = await fetch('https://api.biteship.com/v1/rates/couriers', { method: 'POST', headers: { Authorization: `Basic ${Buffer.from(apiKey + ':').toString('base64')}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ origin_postal_code: 17113, destination_postal_code: destination, couriers: process.env.BITESHIP_COURIERS || 'jne,sicepat,anteraja,jnt', items }), signal: AbortSignal.timeout(12000) });
+    const response = await fetch('https://api.biteship.com/v1/rates/couriers', { method: 'POST', headers: { Authorization: apiKey, 'Content-Type': 'application/json' }, body: JSON.stringify({ origin_postal_code: 17113, destination_postal_code: destination, couriers: process.env.BITESHIP_COURIERS || 'jne,sicepat,anteraja,jnt', items }), signal: AbortSignal.timeout(12000) });
     const result: any = await response.json();
-    if (!response.ok || !result.success) throw new BusinessError(result.message || 'Tarif pengiriman belum tersedia.', 502);
+    if (!response.ok || !result.success) throw new BusinessError(result.error || result.message || 'Tarif pengiriman belum tersedia.', 502);
     return respond(result.pricing || []);
   }
   if (r === 'sales/profile') {
@@ -557,12 +557,12 @@ async function handle(req: Request) {
     if (!apiKey) throw new BusinessError('Koneksi tarif Biteship belum diaktifkan.', 503);
     const rateResponse = await fetch('https://api.biteship.com/v1/rates/couriers', {
       method: 'POST',
-      headers: { Authorization: `Basic ${Buffer.from(apiKey + ':').toString('base64')}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: apiKey, 'Content-Type': 'application/json' },
       body: JSON.stringify({ origin_postal_code: 17113, destination_postal_code: Number(address.postal), couriers: process.env.BITESHIP_COURIERS || 'jne,sicepat,anteraja,jnt', items: totals.items.map((item: any) => { const product = products.find((p) => p.id === item.id)!; return { name: product.name, sku: product.model, value: product.price, quantity: item.qty, weight: product.weight || 1000, ...(product.dimensions || { length: 30, width: 25, height: 20 }) }; }) }),
       signal: AbortSignal.timeout(12000),
     });
     const rateResult: any = await rateResponse.json();
-    if (!rateResponse.ok || !rateResult.success || !rateResult.pricing?.length) throw new BusinessError(rateResult.message || 'Tarif pengiriman tidak tersedia untuk tujuan ini.', 422);
+    if (!rateResponse.ok || !rateResult.success || !rateResult.pricing?.length) throw new BusinessError(rateResult.error || rateResult.message || 'Tarif pengiriman tidak tersedia untuk tujuan ini.', 422);
     const shippingOptions = rateResult.pricing.sort((a:any,b:any)=>a.price-b.price).map((x:any)=>({ id:`${x.courier_code}:${x.courier_service_code}`, name:`${x.courier_name} ${x.courier_service_name}`, cost:x.price, eta:x.duration }));
     const selectedShipping = shippingOptions.find((x:any)=>x.id===body.shipping) || shippingOptions[0];
     totals.shippingCost = selectedShipping.cost;

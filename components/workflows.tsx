@@ -359,7 +359,7 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
   return (
     <main className="container page checkout-page">
       <div className="steps">
-        {['Keranjang', 'Alamat & Pengiriman', 'Pembayaran'].map((t, i) => (
+        {['Keranjang', 'Data & Pengiriman', 'Bayar'].map((t, i) => (
           <div key={t} className={i <= step ? 'active' : ''}>
             <span>{i < step ? <Check size={16} /> : i + 1}</span>
             <strong>{t}</strong>
@@ -483,6 +483,21 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
                   </Btn>
                 </form>
               )}
+            </section>
+          )}
+          {step >= 2 && quote && (
+            <section className="panel payment-method-panel">
+              <h2 className="icon-heading">
+                <LockKeyhole /> Metode Pembayaran
+              </h2>
+              <label className="payment-method-option selected">
+                <input type="radio" name="payment-method" checked readOnly />
+                <span>
+                  <strong>Midtrans</strong>
+                  <small>Transfer bank, QRIS, GoPay, kartu, dan metode lain tersedia di halaman pembayaran.</small>
+                </span>
+                <ShieldCheck size={22}/>
+              </label>
             </section>
           )}
           {step >= 1 && (
@@ -609,14 +624,14 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
               : step === 0
                 ? 'Lanjut ke Pengiriman'
                 : !quote
-                  ? 'Periksa Alamat & Total'
-                  : 'Lanjut Bayar'}
+                  ? 'Periksa Ongkir'
+                  : 'Buat Pesanan & Bayar'}
             <ArrowRight size={18} />
           </Btn>
           <div className="secure-box">
             <LockKeyhole />
             <strong>Belanja dengan tenang</strong>
-            <p>Metode pembayaran ditampilkan setelah layanan pembayaran diaktifkan.</p>
+            <p>Pembayaran diproses aman melalui Midtrans.</p>
           </div>
         </aside>
       </div>
