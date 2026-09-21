@@ -44,8 +44,14 @@ async function nextSalesCode(tx: any) {
   throw new BusinessError('Kode sales belum dapat dibuat. Coba lagi.');
 }
 export async function initPortal() {
-  initialized ||= sql
-    .begin(async (tx: any) => {
+  initialized ||= (async () => {
+    try {
+      const [ready] = await sql`SELECT 1 FROM portal_settings WHERE id='sales-codes-klik-2026-09-21'`;
+      if (ready) return;
+    } catch {
+      // Fresh installations continue into the schema bootstrap below.
+    }
+    await sql.begin(async (tx: any) => {
       await tx`CREATE TABLE IF NOT EXISTS portal_admin (email TEXT PRIMARY KEY, password_hash TEXT NOT NULL)`;
       await tx`CREATE TABLE IF NOT EXISTS portal_sessions (token_hash TEXT PRIMARY KEY, expires_at TIMESTAMPTZ NOT NULL)`;
       await tx`CREATE TABLE IF NOT EXISTS portal_login_attempts (key TEXT PRIMARY KEY, attempts INT NOT NULL DEFAULT 0, started_at TIMESTAMPTZ NOT NULL DEFAULT now())`;
@@ -54,7 +60,8 @@ export async function initPortal() {
       await tx`CREATE TABLE IF NOT EXISTS portal_promos (code TEXT PRIMARY KEY, name TEXT NOT NULL, percent INT NOT NULL, cap INT NOT NULL, active BOOLEAN NOT NULL DEFAULT true)`;
       await tx`CREATE TABLE IF NOT EXISTS portal_banners (id TEXT PRIMARY KEY, title TEXT NOT NULL, accent TEXT NOT NULL, subtitle TEXT NOT NULL, cta TEXT NOT NULL, href TEXT NOT NULL, desktop_image TEXT NOT NULL, mobile_image TEXT NOT NULL, sort_order INT NOT NULL DEFAULT 0, active BOOLEAN NOT NULL DEFAULT true)`;
       await tx`CREATE TABLE IF NOT EXISTS portal_settings (id TEXT PRIMARY KEY, data JSONB NOT NULL)`;
-      await tx`ALTER TABLE portal_sales ADD COLUMN IF NOT EXISTS legacy_code TEXT`;
+      const [legacyColumn] = await tx`SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='portal_sales' AND column_name='legacy_code'`;
+      if (!legacyColumn) await tx`ALTER TABLE portal_sales ADD COLUMN legacy_code TEXT`;
       await tx`CREATE SEQUENCE IF NOT EXISTS portal_sales_code_seq`;
       const codeRevision = await tx`INSERT INTO portal_settings(id,data) VALUES('sales-codes-klik-2026-09-21','{"applied":true}') ON CONFLICT(id) DO NOTHING RETURNING id`;
       if (codeRevision.length) {
@@ -72,23 +79,6 @@ export async function initPortal() {
         }
         await tx`UPDATE portal_products SET data=data || '{"quote":false}'::jsonb WHERE id IN ('ucl-swift-k33','ucl-swift-kf4')`;
       }
-      for (const table of [
-        'portal_admin',
-        'portal_sessions',
-        'portal_login_attempts',
-        'portal_products',
-        'portal_sales',
-        'portal_promos',
-        'portal_banners',
-        'portal_settings',
-        'portal_customers',
-        'records',
-      ]) {
-        await tx.unsafe(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`);
-        await tx.unsafe(
-          `REVOKE ALL ON TABLE ${table} FROM anon, authenticated`,
-        );
-      }
       await tx`INSERT INTO portal_banners(id,title,accent,subtitle,cta,href,desktop_image,mobile_image,sort_order,active) VALUES
         ('hero-1','Klik, sambung,','beres!','Cari kebutuhan fiber? Semua kumpul di sini.','Yuk, cari produk','/produk','/images/play-cable.png','/images/play-cable.png',1,true),
         ('hero-2','Siap ngegas','di lapangan.','Splicer dan alat kerja untuk proyek berikutnya.','Lihat peralatannya','/produk?kategori=Fusion%20Splicer','/images/play-tools.png','/images/play-tools.png',2,true),
@@ -96,8 +86,8 @@ export async function initPortal() {
         ('hero-4','Si kecil,','pelengkap koneksi.','Kabel, konektor, dan perlengkapan FTTH untuk instalasi kamu.','Lengkapi sekarang','/produk?kategori=Konektor%20%26%20Adapter','/images/play-connect.png','/images/play-connect.png',4,true)
         ON CONFLICT(id) DO NOTHING`;
       await tx`UPDATE portal_banners SET mobile_image='/images/play-referral-mobile.png' WHERE id='hero-3' AND mobile_image='/images/play-referral.png'`;
-    })
-    .catch((e) => {
+    });
+  })().catch((e) => {
       initialized = undefined;
       throw e;
     });

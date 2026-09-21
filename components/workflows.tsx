@@ -362,7 +362,7 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
               aria-label="Kode referral sales"
               value={code}
               onChange={(e) => { setCode(e.target.value.toUpperCase()); setQuote(null); setApplied(''); }}
-              placeholder="Contoh: KLIK01"
+              placeholder="Masukkan kode sales (opsional)"
               maxLength={24}
             />
             <Btn
@@ -1179,7 +1179,7 @@ export function QuoteForm() {
                 </label>
                 <label>
                   Kode referral <span>(opsional)</span>
-                  <input name="referralCode" maxLength={20} placeholder="Contoh: KFS1234567" defaultValue={params.get('ref') || ''} />
+                  <input name="referralCode" maxLength={20} placeholder="Masukkan kode sales (opsional)" defaultValue={params.get('ref') || ''} />
                 </label>
                 <label className="span-2">
                   Kota tujuan
