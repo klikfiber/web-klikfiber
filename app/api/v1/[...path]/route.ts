@@ -1,5 +1,5 @@
 import { authServer } from '@/lib/auth/server';
-import { portalRequest, liveProducts, referralCampaign, customerDetails } from '@/lib/portal';
+import { portalRequest, portalBannerImage, liveProducts, referralCampaign, customerDetails } from '@/lib/portal';
 import postgres from 'postgres';
 import { products } from '@/lib/catalog';
 import { BusinessError, validAddress, priceCart } from '@/lib/commerce';
@@ -393,10 +393,17 @@ async function handleMidtransWebhook(payload: any) {
   return { ok: true, status };
 }
 async function handle(req: Request) {
-  await init();
   const url = new URL(req.url);
   const path = url.pathname.replace('/api/v1/', '').split('/');
   const isPost = req.method === 'POST';
+  if (
+    !isPost &&
+    path[0] === 'portal' &&
+    path[1] === 'banner-image' &&
+    path[2] &&
+    path[3]
+  )
+    return portalBannerImage(path[2], path[3]);
   if (isPost) {
     const origin = req.headers.get('origin');
     if (origin) {
@@ -428,6 +435,7 @@ async function handle(req: Request) {
   }
   const rpath = path.join('/');
   if(path[0]==='portal')return respond(await portalRequest(req,path,body));
+  await init();
   if(['admin','marketing','sales'].includes(path[0]))throw new BusinessError('Gunakan portal terbaru di /myshop atau /sales.',410);
   if (rpath === 'webhooks/midtrans' && isPost)
     return respond(await handleMidtransWebhook(body));

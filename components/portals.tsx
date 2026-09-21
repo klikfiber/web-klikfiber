@@ -382,6 +382,7 @@ export function AdminPortal() {
     [query, setQuery] = useState(''),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
+    [loadingBanners, setLoadingBanners] = useState(false),
     [notificationsOpen, setNotificationsOpen] = useState(false),
     [edit, setEdit] = useState<any>(null),
     [activities, setActivities] = useState<any[] | null>(null);
@@ -420,7 +421,12 @@ export function AdminPortal() {
     try {
       await api('portal/admin/' + path, body);
       setEdit(null);
-      await load();
+      if (path === 'banner') {
+        const banners = await api('portal/admin/banners');
+        setData((current: any) => ({ ...current, banners }));
+      } else {
+        await load();
+      }
       return true;
     } catch (e: any) {
       setError(e.message);
@@ -513,6 +519,29 @@ export function AdminPortal() {
     setEdit(null);
     setActivities(null);
     setQuery('');
+    if (value === 'banners' && !data.banners?.length && !loadingBanners) {
+      setLoadingBanners(true);
+      void api('portal/admin/banners')
+        .then((banners) =>
+          setData((current: any) => ({ ...current, banners })),
+        )
+        .catch((e: any) => setError(e.message))
+      .finally(() => setLoadingBanners(false));
+    }
+  };
+  const refreshCurrent = async () => {
+    await load(true);
+    if (tab === 'banners') {
+      setLoadingBanners(true);
+      try {
+        const banners = await api('portal/admin/banners');
+        setData((current: any) => ({ ...current, banners }));
+      } catch (e: any) {
+        setError(e.message);
+      } finally {
+        setLoadingBanners(false);
+      }
+    }
   };
   return (
     <main className="portal-dashboard admin-dashboard admin-app">
@@ -629,7 +658,7 @@ export function AdminPortal() {
               <h1>{pageTitle[tab][0]}</h1>
               <p>{pageTitle[tab][1]}</p>
             </div>
-            <button className="admin-refresh" onClick={() => load(true)}>
+            <button className="admin-refresh" onClick={() => void refreshCurrent()}>
               <TrendingUp size={17} /> Perbarui data
             </button>
           </header>
@@ -675,11 +704,15 @@ export function AdminPortal() {
             </section>
           )}
           {tab === 'banners' && (
-            <BannerManager
-              banners={data.banners || []}
-              busy={busy}
-              onSave={(banner) => action('banner', banner)}
-            />
+            loadingBanners ? (
+              <section className="panel"><p role="status">Memuat editor banner…</p></section>
+            ) : (
+              <BannerManager
+                banners={data.banners || []}
+                busy={busy}
+                onSave={(banner) => action('banner', banner)}
+              />
+            )
           )}
           {tab === 'orders' && (
             <section className="admin-card orders-page-card">

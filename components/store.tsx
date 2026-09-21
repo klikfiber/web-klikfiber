@@ -347,24 +347,20 @@ function Home() {
  const {products}=useStore();
  const [bannerIndex,setBannerIndex]=useState(0);
  const bannerRef=useRef<HTMLDivElement>(null);
- const fallbackBanners=[
-  {id:'hero-1',title:'Klik, sambung,',accent:'beres!',subtitle:'Cari kebutuhan fiber? Semua kumpul di sini.',cta:'Yuk, cari produk',href:'/produk',desktopImage:'/images/play-cable.png',mobileImage:'/images/play-cable.png'},
-  {id:'hero-2',title:'Siap ngegas',accent:'di lapangan.',subtitle:'Splicer dan alat kerja untuk proyek berikutnya.',cta:'Lihat peralatannya',href:'/produk?kategori=Fusion%20Splicer',desktopImage:'/images/play-tools.png',mobileImage:'/images/play-tools.png'},
- ];
- fallbackBanners.push({id:'hero-3',title:'Punya kode sales?',accent:'Belanja lebih hemat.',subtitle:'Gunakan referral sales saat checkout. Potongan mengikuti kode yang aktif.',cta:'Cari produk',href:'/produk',desktopImage:'/images/play-referral.png',mobileImage:'/images/play-referral-mobile.png'},{id:'hero-4',title:'Si kecil,',accent:'pelengkap koneksi.',subtitle:'Kabel, konektor, dan perlengkapan FTTH untuk instalasi kamu.',cta:'Lengkapi sekarang',href:'/produk?kategori=Konektor%20%26%20Adapter',desktopImage:'/images/play-connect.png',mobileImage:'/images/play-connect.png'});
- const [banners,setBanners]=useState<any[]>(fallbackBanners);
+ const [banners,setBanners]=useState<any[] | null>(null);
  useEffect(()=>{void api('portal/banners').then((items)=>{if(Array.isArray(items))setBanners(items);}).catch(()=>undefined);},[]);
  const [categoryPaused,setCategoryPaused]=useState(false);
  const categoryRef=useRef<HTMLDivElement>(null);
  useEffect(()=>{if(categoryPaused || matchMedia('(prefers-reduced-motion: reduce)').matches)return;const timer=setInterval(()=>{const el=categoryRef.current;if(el)el.scrollTo({left:el.scrollLeft+130>=el.scrollWidth-el.clientWidth?0:el.scrollLeft+130,behavior:'smooth'});},3500);return()=>clearInterval(timer);},[categoryPaused]);
  return (<>
       <section className="play-hero" aria-label="Inspirasi koneksi" aria-roledescription="carousel">
-        <div className="play-track" ref={bannerRef} onScroll={()=>{const el=bannerRef.current;if(el)setBannerIndex(Math.round(el.scrollLeft/el.clientWidth));}}>
-          {banners.map((b,i)=><article className="play-slide" data-banner={b.id} key={b.id} aria-label={`${i+1} dari ${banners.length}`} aria-roledescription="slide">
+        <div className="play-track" ref={bannerRef} aria-busy={banners === null} onScroll={()=>{const el=bannerRef.current;if(el)setBannerIndex(Math.round(el.scrollLeft/el.clientWidth));}}>
+          {banners === null && <article className="play-slide banner-skeleton" aria-label="Memuat banner terbaru" />}
+          {banners?.map((b,i)=><article className="play-slide" data-banner={b.id} key={b.id} aria-label={`${i+1} dari ${banners.length}`} aria-roledescription="slide">
             <Link className="banner-image-link" href={b.href} aria-label={`Lihat penawaran banner ${i+1}`}><picture><source media="(max-width: 767px)" srcSet={b.mobileImage}/><img className="play-art" src={b.desktopImage} alt={`Pilihan Klikfiber ${i+1}`} loading={i === 0 ? 'eager' : 'lazy'} /></picture></Link>
           </article>)}
         </div>
-          <div className="play-pagination"><span>Geser, temukan yang cocok <ArrowRight size={14}/></span><div>{banners.map((b,i)=><button key={b.id} aria-label={`Lihat banner ${i+1}`} aria-pressed={bannerIndex===i} onClick={()=>bannerRef.current?.scrollTo({left:i*bannerRef.current.clientWidth,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'})}/>)}</div></div>
+          {banners && <div className="play-pagination"><span>Geser, temukan yang cocok <ArrowRight size={14}/></span><div>{banners.map((b,i)=><button key={b.id} aria-label={`Lihat banner ${i+1}`} aria-pressed={bannerIndex===i} onClick={()=>bannerRef.current?.scrollTo({left:i*bannerRef.current.clientWidth,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'})}/>)}</div></div>}
       </section>      <div className="container">
         <section className="section">
           <SectionHead
@@ -822,7 +818,7 @@ function Detail({ id }: { id: string }) {
     </main>
   );
 }
-export default function Store() {
+function Storefront() {
   const [catalog,setCatalog]=useState<Product[]>(products);
   const [social,setSocial]=useState({instagram:'',tiktok:''});
   useEffect(()=>{void api('portal/settings').then(setSocial).catch(()=>undefined)},[]);
@@ -1124,4 +1120,15 @@ export default function Store() {
       </>
     </Context.Provider>
   );
+}
+
+export default function Store() {
+  const path = usePathname();
+  if (
+    path.startsWith('/myshop') ||
+    path.startsWith('/admin') ||
+    path.startsWith('/marketing')
+  )
+    return <AdminPortal />;
+  return <Storefront />;
 }

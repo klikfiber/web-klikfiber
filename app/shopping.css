@@ -4,6 +4,8 @@
 .banner-image-link { display:block; width:100%; height:100%; }
 .play-slide .banner-image-link picture { position:static; display:block; width:100%; height:100%; }
 .play-slide .banner-image-link .play-art { width:100%; height:100%; object-fit:contain; object-position:center; }
+.banner-skeleton { background:linear-gradient(100deg,#f7f1e7 20%,#fffaf2 40%,#f7f1e7 60%); background-size:220% 100%; animation:banner-loading 1.1s ease-in-out infinite; }
+@keyframes banner-loading { to { background-position-x:-220%; } }
 .shop-gallery { min-width:0; }
 .gallery-stage { position:relative; background:white; border:1px solid var(--border); border-radius:18px; overflow:hidden; }
 .gallery-viewport { overflow:hidden; touch-action:pan-y pinch-zoom; }

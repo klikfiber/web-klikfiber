@@ -175,13 +175,50 @@ async function activity(code: string) {
     };
   });
 }
+
+function publicBannerImageUrl(
+  id: string,
+  variant: 'desktop' | 'mobile',
+  source: string,
+) {
+  if (!source.startsWith('data:')) return source;
+  const revision = createHash('sha1').update(source).digest('hex').slice(0, 12);
+  return `/api/v1/portal/banner-image/${encodeURIComponent(id)}/${variant}?v=${revision}`;
+}
+
+export async function portalBannerImage(id: string, variant: string) {
+  await initPortal();
+  if (!/^[a-zA-Z0-9_-]{1,80}$/.test(id) || !['desktop', 'mobile'].includes(variant))
+    throw new BusinessError('Gambar banner tidak ditemukan.', 404);
+  const column = variant === 'desktop' ? 'desktop_image' : 'mobile_image';
+  const [row] = await sql.unsafe(
+    `SELECT ${column} AS image FROM portal_banners WHERE id=$1 AND active=true`,
+    [id],
+  );
+  const source = String(row?.image || '');
+  const match = source.match(/^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/);
+  if (!match) throw new BusinessError('Gambar banner tidak ditemukan.', 404);
+  return new Response(Buffer.from(match[2], 'base64'), {
+    headers: {
+      'Content-Type': `image/${match[1]}`,
+      'Cache-Control': 'public, max-age=31536000, immutable',
+    },
+  });
+}
+
 export async function portalRequest(req: Request, path: string[], body: any) {
   await initPortal();
   const action = path.slice(1).join('/'),
     post = req.method === 'POST';
   if (action === 'settings' && !post) { const [row] = await sql`SELECT data FROM portal_settings WHERE id='social'`; return row?.data || {instagram:'',tiktok:''}; }
-  if (action === 'banners' && !post)
-    return sql`SELECT id,title,accent,subtitle,cta,href,desktop_image AS "desktopImage",mobile_image AS "mobileImage",sort_order AS "sortOrder" FROM portal_banners WHERE active=true ORDER BY sort_order,id`;
+  if (action === 'banners' && !post) {
+    const rows = await sql`SELECT id,title,accent,subtitle,cta,href,desktop_image AS "desktopImage",mobile_image AS "mobileImage",sort_order AS "sortOrder" FROM portal_banners WHERE active=true ORDER BY sort_order,id`;
+    return rows.map((banner) => ({
+      ...banner,
+      desktopImage: publicBannerImageUrl(banner.id, 'desktop', banner.desktopImage),
+      mobileImage: publicBannerImageUrl(banner.id, 'mobile', banner.mobileImage),
+    }));
+  }
   if (action === 'admin/login' && post) {
     const email = String(body.email || '')
         .trim()
@@ -298,8 +335,10 @@ export async function portalRequest(req: Request, path: string[], body: any) {
         products: catalog,
         sales,
         promos: await sql`SELECT * FROM portal_promos ORDER BY code`,
-        banners:
-          await sql`SELECT id,title,accent,subtitle,cta,href,desktop_image AS "desktopImage",mobile_image AS "mobileImage",sort_order AS "sortOrder",active FROM portal_banners ORDER BY sort_order,id`,
+        // Banner image payloads are intentionally loaded only when the admin
+        // opens the banner editor. Keeping them out of login makes /myshop
+        // responsive even when four high-resolution images are stored.
+        banners: [],
         analytics: {
           totalRevenue: orders
             .filter(isPaid)
@@ -371,6 +410,8 @@ export async function portalRequest(req: Request, path: string[], body: any) {
         },
       };
     }
+    if (action === 'admin/banners' && !post)
+      return sql`SELECT id,title,accent,subtitle,cta,href,desktop_image AS "desktopImage",mobile_image AS "mobileImage",sort_order AS "sortOrder",active FROM portal_banners ORDER BY sort_order,id`;
     if (action === 'admin/settings' && post) {
       const clean = (value:unknown,host:string) => { if(!value)return ''; let url:URL; try{url=new URL(String(value));}catch{throw new BusinessError('Masukkan URL lengkap.');} if(url.protocol!=='https:' || ![host,'www.'+host].includes(url.hostname) || url.username || url.password)throw new BusinessError('Gunakan tautan HTTPS '+host); return url.toString(); };
       const data={instagram:clean(body.instagram,'instagram.com'),tiktok:clean(body.tiktok,'tiktok.com')};
