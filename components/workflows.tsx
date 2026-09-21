@@ -180,7 +180,6 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
   const [code, setCode] = useState('');
   const [applied, setApplied] = useState('');
   const [quote, setQuote] = useState<any>(null);
-  const [accepted, setAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [order, setOrder] = useState<any>(null);
@@ -203,6 +202,9 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
     setQuote(null);
     key.current = '';
   }, [s.cart]);
+  useEffect(() => {
+    if (step === 2 && quote) document.getElementById('shipping-options')?.scrollIntoView({ block: 'start', behavior: 'instant' });
+  }, [step, quote?.id]);
   const subtotal = s.cart.reduce(
     (n, item) => n + products.find((p) => p.id === item.id)!.price * item.qty,
     0,
@@ -353,16 +355,14 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
           <section className="panel promo-box referral-box">
             <Gift />
             <div>
-              <h3>Kode referral sales <b>Wajib</b></h3>
-              <p>Masukkan kode dari sales KLIKFIBER untuk mendapatkan potongan harga.</p>
+              <h3>Klaim Potongan Harga Dengan Kode Referal</h3>
+              <p>Opsional. Punya kode sales? Masukkan untuk mendapat potongan harga.</p>
             </div>
             <input
               aria-label="Kode referral sales"
-              aria-required="true"
-              required
               value={code}
               onChange={(e) => { setCode(e.target.value.toUpperCase()); setQuote(null); setApplied(''); }}
-              placeholder="Contoh: KFS1234567"
+              placeholder="Contoh: KLIK01"
               maxLength={24}
             />
             <Btn
@@ -387,6 +387,7 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
             >
               Cek Kode
             </Btn>
+            {code && <button type="button" className="referral-skip text-link" disabled={busy} onClick={() => { setCode(''); setApplied(''); setQuote(null); setError(''); localStorage.removeItem('klikfiber-referral'); }}>Lanjut tanpa kode referral</button>}
           </section>
           {step >= 1 && (
             <section className="panel">
@@ -395,11 +396,14 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
               </h2>
               {!s.profile ? (
                 <LoginGate />
+              ) : step >= 2 && quote ? (
+                <div className="delivery-address-summary"><strong>{address.name}</strong><p>{address.phone}<br/>{address.street}<br/>{[address.village,address.district,address.city,address.province,address.postal].filter(Boolean).join(', ')}</p><button type="button" className="text-link" disabled={busy} onClick={() => { setStep(1); setQuote(null); }}>Ubah alamat</button></div>
               ) : (
                 <form
                   id="address-form"
                   onSubmit={async (e) => {
                     e.preventDefault();
+                    setBusy(true); setError('');
                     try {
                       await api('addresses', address);
                       localStorage.setItem(
@@ -409,11 +413,10 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
                       const q = await getQuote();
                       if (q) {
                         setStep(2);
-                        notify('Alamat dan ongkir berhasil diperiksa');
                       }
                     } catch (e: any) {
                       setError(e.message);
-                    }
+                    } finally { setBusy(false); }
                   }}
                 >
                   <AddressFields
@@ -423,35 +426,17 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
                       setQuote(null);
                     }}
                   />
-                  <Btn type="submit" outline disabled={busy}>
-                    Simpan & Periksa Ongkir <ArrowRight size={17} />
-                  </Btn>
                 </form>
               )}
             </section>
           )}
           {step >= 2 && quote && (
-            <section className="panel payment-method-panel">
-              <h2 className="icon-heading">
-                <LockKeyhole /> Metode Pembayaran
-              </h2>
-              <label className="payment-method-option selected">
-                <input type="radio" name="payment-method" checked readOnly />
-                <span>
-                  <strong>Midtrans</strong>
-                  <small>Transfer bank, QRIS, GoPay, kartu, dan metode lain tersedia di halaman pembayaran.</small>
-                </span>
-                <ShieldCheck size={22}/>
-              </label>
-            </section>
-          )}
-          {step >= 1 && (
-            <section className="panel">
+            <section className="panel" id="shipping-options">
               <h2 className="icon-heading">
                 <Truck /> Metode Pengiriman
               </h2>
               <p className="small muted">
-                Tarif dan estimasi ditampilkan langsung dari Biteship setelah alamat diperiksa.
+                Pilih kurir. Total pembayaran langsung menyesuaikan ongkos kirim.
               </p>
               <RadioGroup
                 value={ship}
@@ -486,6 +471,21 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
               </RadioGroup>
             </section>
           )}
+          {step >= 2 && quote && (
+            <section className="panel payment-method-panel">
+              <h2 className="icon-heading">
+                <LockKeyhole /> Metode Pembayaran
+              </h2>
+              <label className="payment-method-option selected">
+                <input type="radio" name="payment-method" checked readOnly />
+                <span>
+                  <strong>Midtrans</strong>
+                  <small>Transfer bank, QRIS, GoPay, kartu, dan metode lain tersedia di halaman pembayaran.</small>
+                </span>
+                <ShieldCheck size={22}/>
+              </label>
+            </section>
+          )}
         </div>
         <aside className="panel order-summary">
           <h2>Ringkasan Pesanan</h2>
@@ -497,9 +497,7 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
             <div>
               <dt>Pengiriman {quote?.selectedShipping ? `(${quote.selectedShipping.name})` : ''}</dt>
               <dd>
-                {rupiah(
-                  quote?.shippingCost ?? 0,
-                )}
+                {quote ? rupiah(quote.shippingCost) : 'Dihitung setelah alamat'}
               </dd>
             </div>
             <div>
@@ -521,13 +519,6 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
             </div>
           </dl>
           {error && <ErrorBox message={error} />}
-          <label className="check-label terms">
-            <Checkbox checked={accepted} onCheckedChange={setAccepted} />
-            <span>
-              Saya menyetujui <Link href="/syarat">Syarat & Ketentuan</Link> dan
-              menyetujui Kebijakan Privasi.
-            </span>
-          </label>
           <Btn
             className="full"
             disabled={busy}
@@ -538,10 +529,6 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
               }
               if (!s.profile) {
                 s.login();
-                return;
-              }
-              if (!accepted) {
-                setError('Setujui syarat dan kebijakan privasi terlebih dahulu.');
                 return;
               }
               if (!quote) {
@@ -558,7 +545,6 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
                 const o = await api('orders', {
                   quoteId: quote.id,
                   requestId: key.current,
-                  terms: true,
                 });
                 router.push('/pembayaran/' + o.id);
               } catch (e: any) {
@@ -573,7 +559,7 @@ export function Checkout({ paymentId }: { paymentId?: string }) {
               : step === 0
                 ? 'Lanjut ke Pengiriman'
                 : !quote
-                  ? 'Periksa Ongkir'
+                  ? 'Lanjut ke Pilihan Pengiriman'
                   : 'Buat Pesanan & Bayar'}
             <ArrowRight size={18} />
           </Btn>

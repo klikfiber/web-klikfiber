@@ -361,8 +361,7 @@ function Home() {
       <section className="play-hero" aria-label="Inspirasi koneksi" aria-roledescription="carousel">
         <div className="play-track" ref={bannerRef} onScroll={()=>{const el=bannerRef.current;if(el)setBannerIndex(Math.round(el.scrollLeft/el.clientWidth));}}>
           {banners.map((b,i)=><article className="play-slide" data-banner={b.id} key={b.id} aria-label={`${i+1} dari ${banners.length}`} aria-roledescription="slide">
-            <picture><source media="(max-width: 767px)" srcSet={b.mobileImage}/><img className="play-art" src={b.desktopImage} alt="" /></picture>
-            <div className="play-copy"><span className="play-tag">PILIHAN KLIKFIBER</span>{i===0?<h1>{b.title}<br/><em>{b.accent}</em></h1>:<h2>{b.title}<br/><em>{b.accent}</em></h2>}<p>{b.subtitle}</p><Link className="play-cta" href={b.href}>{b.cta}<ArrowUpRight size={20}/></Link></div>
+            <Link className="banner-image-link" href={b.href} aria-label={`Lihat penawaran banner ${i+1}`}><picture><source media="(max-width: 767px)" srcSet={b.mobileImage}/><img className="play-art" src={b.desktopImage} alt={`Pilihan Klikfiber ${i+1}`} loading={i === 0 ? 'eager' : 'lazy'} /></picture></Link>
           </article>)}
         </div>
           <div className="play-pagination"><span>Geser, temukan yang cocok <ArrowRight size={14}/></span><div>{banners.map((b,i)=><button key={b.id} aria-label={`Lihat banner ${i+1}`} aria-pressed={bannerIndex===i} onClick={()=>bannerRef.current?.scrollTo({left:i*bannerRef.current.clientWidth,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'})}/>)}</div></div>

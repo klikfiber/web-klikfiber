@@ -88,8 +88,7 @@ function BannerManager({
               <span>Banner {index + 1}</span>
             </div>
             <div>
-              <strong>{banner.title} {banner.accent}</strong>
-              <p>{banner.subtitle}</p>
+              <strong>Banner {index + 1}</strong>
               <small>{banner.active ? 'Aktif di homepage' : 'Disembunyikan'}</small>
             </div>
             <button className="btn outline" onClick={() => setDraft({ ...banner })}>
@@ -101,7 +100,7 @@ function BannerManager({
       {draft && (
         <section className="panel portal-editor banner-editor" id="portal-editor" aria-label="Editor banner">
           <div className="portal-heading">
-            <div><h2>Edit {'banner ' + draft.id.replace('hero-','')}</h2><p>Gambar otomatis dipotong ke ukuran yang tepat saat disimpan.</p></div>
+            <div><h2>Edit {'banner ' + draft.id.replace('hero-','')}</h2><p>Seluruh gambar ditampilkan utuh. Masukkan tulisan promosi langsung di desain gambar.</p></div>
             <button className="btn outline" onClick={() => setDraft(null)}>Tutup</button>
           </div>
           <form className="stack" onSubmit={async (event) => {
@@ -122,11 +121,7 @@ function BannerManager({
             </div>
             {fileError && <p className="error" role="alert">{fileError}</p>}
             <div className="banner-copy-grid">
-              <label>Judul<input value={draft.title} maxLength={60} required onChange={(e) => setDraft({ ...draft, title: e.target.value })} /></label>
-              <label>Kata sorotan<input value={draft.accent} maxLength={40} required onChange={(e) => setDraft({ ...draft, accent: e.target.value })} /></label>
-              <label>Kalimat singkat<input value={draft.subtitle} maxLength={120} required onChange={(e) => setDraft({ ...draft, subtitle: e.target.value })} /></label>
-              <label>Teks tombol<input value={draft.cta} maxLength={40} required onChange={(e) => setDraft({ ...draft, cta: e.target.value })} /></label>
-              <label>Tujuan tombol<input value={draft.href} maxLength={200} required onChange={(e) => setDraft({ ...draft, href: e.target.value })} /></label>
+              <label>Tautan saat gambar diklik<input value={draft.href} maxLength={200} required onChange={(e) => setDraft({ ...draft, href: e.target.value })} /></label>
               <label className="banner-active"><input type="checkbox" checked={draft.active} onChange={(e) => setDraft({ ...draft, active: e.target.checked })} /> Tampilkan banner</label>
             </div>
             <button className="btn" disabled={busy || !!fileError}>{busy ? 'Menyimpan…' : 'Simpan dan tampilkan'}</button>

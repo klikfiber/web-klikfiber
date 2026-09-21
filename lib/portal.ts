@@ -6,7 +6,7 @@ type PhotoPipeline = {
   resize(
     width: number,
     height: number,
-    options: { fit: string },
+    options: { fit: string; withoutEnlargement?: boolean },
   ): PhotoPipeline;
   webp(options: { quality: number }): PhotoPipeline;
   toBuffer(): Promise<Buffer>;
@@ -34,6 +34,15 @@ const sql = postgres(process.env.DATABASE_URL!, {
 const ADMIN = 'klikfiber@gmail.com';
 const COOKIE = 'klikfiber-admin';
 let initialized: Promise<unknown> | undefined;
+async function nextSalesCode(tx: any) {
+  for (let attempt = 0; attempt < 10000; attempt++) {
+    const [row] = await tx`SELECT nextval('portal_sales_code_seq') AS number`;
+    const code = 'KLIK' + String(row.number).padStart(2, '0');
+    const collision = await tx`SELECT code FROM portal_sales WHERE code=${code} OR legacy_code=${code} UNION SELECT code FROM portal_promos WHERE code=${code}`;
+    if (!collision.length) return code;
+  }
+  throw new BusinessError('Kode sales belum dapat dibuat. Coba lagi.');
+}
 export async function initPortal() {
   initialized ||= sql
     .begin(async (tx: any) => {
@@ -45,6 +54,16 @@ export async function initPortal() {
       await tx`CREATE TABLE IF NOT EXISTS portal_promos (code TEXT PRIMARY KEY, name TEXT NOT NULL, percent INT NOT NULL, cap INT NOT NULL, active BOOLEAN NOT NULL DEFAULT true)`;
       await tx`CREATE TABLE IF NOT EXISTS portal_banners (id TEXT PRIMARY KEY, title TEXT NOT NULL, accent TEXT NOT NULL, subtitle TEXT NOT NULL, cta TEXT NOT NULL, href TEXT NOT NULL, desktop_image TEXT NOT NULL, mobile_image TEXT NOT NULL, sort_order INT NOT NULL DEFAULT 0, active BOOLEAN NOT NULL DEFAULT true)`;
       await tx`CREATE TABLE IF NOT EXISTS portal_settings (id TEXT PRIMARY KEY, data JSONB NOT NULL)`;
+      await tx`ALTER TABLE portal_sales ADD COLUMN IF NOT EXISTS legacy_code TEXT`;
+      await tx`CREATE SEQUENCE IF NOT EXISTS portal_sales_code_seq`;
+      const codeRevision = await tx`INSERT INTO portal_settings(id,data) VALUES('sales-codes-klik-2026-09-21','{"applied":true}') ON CONFLICT(id) DO NOTHING RETURNING id`;
+      if (codeRevision.length) {
+        const existingSales = await tx`SELECT id,code FROM portal_sales WHERE code IS NOT NULL AND code !~ '^KLIK[0-9]+$' ORDER BY created_at,id`;
+        for (const sale of existingSales) {
+          const code = await nextSalesCode(tx);
+          await tx`UPDATE portal_sales SET legacy_code=code,code=${code} WHERE id=${sale.id}`;
+        }
+      }
       await tx`CREATE TABLE IF NOT EXISTS portal_customers (id TEXT PRIMARY KEY, name TEXT NOT NULL, avatar TEXT NOT NULL DEFAULT 'blue', profile_complete BOOLEAN NOT NULL DEFAULT true)`;
       const priceRevision = await tx`INSERT INTO portal_settings(id,data) VALUES('splicer-prices-2026-09-20','{"applied":true}') ON CONFLICT(id) DO NOTHING RETURNING id`;
       if (priceRevision.length) {
@@ -128,7 +147,7 @@ const text = (v: unknown, min = 2, max = 150) => {
 export async function referralCampaign(code: string) {
   await initPortal();
   const [s] =
-    await sql`SELECT * FROM portal_sales WHERE code=${code} AND status='approved'`;
+    await sql`SELECT * FROM portal_sales WHERE (code=${code} OR legacy_code=${code}) AND status='approved'`;
   const [p] = s
     ? []
     : await sql`SELECT * FROM portal_promos WHERE code=${code} AND active=true`;
@@ -151,7 +170,7 @@ export async function referralCampaign(code: string) {
 }
 async function activity(code: string) {
   const rows =
-    await sql`SELECT kind,payload FROM records WHERE kind IN ('rfq','order') AND COALESCE(payload::jsonb->>'referralCode',payload::jsonb->>'code')=${code} ORDER BY payload::jsonb->>'createdAt' DESC LIMIT 200`;
+    await sql`SELECT kind,payload FROM records WHERE kind IN ('rfq','order') AND (COALESCE(payload::jsonb->>'referralCode',payload::jsonb->>'code')=${code} OR COALESCE(payload::jsonb->>'referralCode',payload::jsonb->>'code') IN (SELECT legacy_code FROM portal_sales WHERE code=${code})) ORDER BY payload::jsonb->>'createdAt' DESC LIMIT 200`;
   return rows.map((r) => {
     const p = JSON.parse(r.payload);
     return {
@@ -406,15 +425,18 @@ export async function portalRequest(req: Request, path: string[], body: any) {
         throw new BusinessError('Status tidak valid.');
       const max = num(body.maxDiscount, 0, 50),
         cap = num(body.cap, 0, 10000000);
+      const [currentSale] = await sql`SELECT code FROM portal_sales WHERE id=${text(body.id)}`;
+      if (!currentSale) throw new BusinessError('Sales tidak ditemukan.', 404);
+      const newCode = body.status === 'approved' && !currentSale.code ? await nextSalesCode(sql) : currentSale.code;
       const rows =
-        await sql`UPDATE portal_sales SET status=${body.status},max_discount=${max},cap=${cap},discount=LEAST(discount,${max}),code=CASE WHEN ${body.status}='approved' THEN COALESCE(code,${'KFS' + randomBytes(6).toString('hex').toUpperCase()}) ELSE code END,approved_at=CASE WHEN ${body.status}='approved' THEN now() ELSE approved_at END WHERE id=${text(body.id)} RETURNING id`;
+        await sql`UPDATE portal_sales SET status=${body.status},max_discount=${max},cap=${cap},discount=LEAST(discount,${max}),code=CASE WHEN ${body.status}='approved' THEN COALESCE(code,${newCode}) ELSE code END,approved_at=CASE WHEN ${body.status}='approved' THEN now() ELSE approved_at END WHERE id=${text(body.id)} RETURNING id`;
       if (!rows.length) throw new BusinessError('Sales tidak ditemukan.', 404);
       return { ok: true };
     }
     if (action === 'admin/promo' && post) {
       const code = text(body.code, 3, 20).toUpperCase();
-      if (!/^[A-Z0-9]+$/.test(code) || code.startsWith('KFS'))
-        throw new BusinessError('Gunakan kode alfanumerik tanpa awalan KFS.');
+      if (!/^[A-Z0-9]+$/.test(code) || code.startsWith('KFS') || /^KLIK\d+$/.test(code))
+        throw new BusinessError('Awalan KLIK diikuti angka dikhususkan untuk kode sales. Gunakan kode promo lain.');
       const name = text(body.name),
         percent = num(body.percent, 1, 50),
         cap = num(body.cap, 1, 10000000);
@@ -434,7 +456,7 @@ export async function portalRequest(req: Request, path: string[], body: any) {
           const buffer = Buffer.from(image.split(',')[1], 'base64');
           const result = await photoProcessor(buffer, { limitInputPixels: 30000000 })
             .rotate()
-            .resize(width, height, { fit: 'cover' })
+            .resize(width, height, { fit: 'inside', withoutEnlargement: true })
             .webp({ quality: 82 })
             .toBuffer();
           return 'data:image/webp;base64,' + result.toString('base64');
@@ -443,8 +465,10 @@ export async function portalRequest(req: Request, path: string[], body: any) {
         }
       };
       const desktopImage = await processImage(body.desktopImage, 1600, 640, existing[0].desktop_image);
-      const mobileImage = await processImage(body.mobileImage, 800, 900, existing[0].mobile_image);
-      await sql`UPDATE portal_banners SET title=${text(body.title, 2, 60)},accent=${text(body.accent, 2, 40)},subtitle=${text(body.subtitle, 2, 120)},cta=${text(body.cta, 2, 40)},href=${text(body.href, 1, 200)},desktop_image=${desktopImage},mobile_image=${mobileImage},active=${body.active === true} WHERE id=${bannerId}`;
+      const mobileImage = await processImage(body.mobileImage, 800, 400, existing[0].mobile_image);
+      const href = text(body.href, 1, 200);
+      if (!/^\/(?!\/)/.test(href) && !/^https:\/\//.test(href)) throw new BusinessError('Gunakan tautan halaman website atau URL HTTPS.');
+      await sql`UPDATE portal_banners SET href=${href},desktop_image=${desktopImage},mobile_image=${mobileImage},active=${body.active === true} WHERE id=${bannerId}`;
       return { ok: true };
     }
     if (action === 'admin/activity' && !post) {

@@ -204,7 +204,7 @@ async function release(owner: string, o: any, status: string) {
     ),
     update(owner, next),
   ];
-  if (o.code)
+  if (o.code && !o.portalReferral)
     statements.push(
       db()
         .prepare(
@@ -376,7 +376,7 @@ async function handleMidtransWebhook(payload: any) {
         paidAt: String(verified.settlement_time || verified.transaction_time || now()),
       };
       await transaction`UPDATE records SET payload=${JSON.stringify(paid)} WHERE id=${order.id} AND owner=${locked.owner}`;
-      if (order.code)
+      if (order.code && !order.portalReferral)
         await transaction`UPDATE campaigns SET reserved=reserved-${order.discount},used=used+${order.discount},countReserved=countReserved-1,countUsed=countUsed+1 WHERE owner=${locked.owner} AND code=${order.code} AND countReserved>0`;
     } else if (status !== 'paid' && order.paymentStatus !== 'paid') {
       const next = {
@@ -545,12 +545,10 @@ async function handle(req: Request) {
     const code = String(body.code || '')
       .trim()
       .toUpperCase();
-    if (!code)
-      throw new BusinessError('Masukkan kode referral sales untuk melanjutkan checkout.');
     const campaign = code
       ? await referralCampaign(code)
       : null;
-    if (!campaign)
+    if (code && !campaign)
       throw new BusinessError('Kode referral sales tidak valid atau belum aktif.');
     const totals = priceCart(body.items, 'regular', campaign, products);
     const apiKey = process.env.BITESHIP_API_KEY;
@@ -583,6 +581,8 @@ async function handle(req: Request) {
       ...totals,
       address,
       code,
+      portalReferral: !!campaign,
+      salesId: campaign?.salesId || null,
       shippingOptions,
       selectedShipping,
       createdAt: now(),
@@ -620,9 +620,12 @@ async function handle(req: Request) {
         );
       return respond(await record(owner, old.recordId, 'order'));
     }
-    if (body.terms !== true)
-      throw new BusinessError('Persetujuan transaksi diperlukan.');
     const q = await record(owner, body.quoteId, 'checkout');
+    if (q.code && q.portalReferral) {
+      const currentReferral = await referralCampaign(q.code);
+      const currentDiscount = currentReferral ? Math.min(Math.floor(q.subtotal * currentReferral.percent / 100), currentReferral.cap, q.subtotal) : -1;
+      if (currentDiscount !== q.discount) throw new BusinessError('Kode atau potongan harga berubah. Lanjutkan dari alamat untuk memperbarui total.', 409);
+    }
     if (Date.parse(q.expiresAt) < Date.now())
       throw new BusinessError(
         'Ongkir kedaluwarsa. Periksa total kembali.',
@@ -662,7 +665,7 @@ async function handle(req: Request) {
           )
           .bind(p.qty, owner, p.id),
       );
-    if (o.code)
+    if (o.code && !o.portalReferral)
       stmts.push(
         ...guard(
           "SELECT status='active' AND used+reserved+?<=budget AND countUsed+countReserved<quota FROM campaigns WHERE owner=? AND code=?",
@@ -724,7 +727,7 @@ async function handle(req: Request) {
         update(owner, paid),
         audit(owner, 'demo-provider', 'payment.succeeded', o.number),
       ];
-      if (o.code)
+      if (o.code && !o.portalReferral)
         stmts.push(
           db()
             .prepare(
