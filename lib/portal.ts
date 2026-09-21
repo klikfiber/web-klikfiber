@@ -273,15 +273,46 @@ export async function portalRequest(req: Request, path: string[], body: any) {
       return { ok: true };
     }
     if (action === 'admin/overview' && !post) {
-      const sales =
-        await sql`SELECT * FROM portal_sales ORDER BY created_at DESC`;
-      const catalog = await liveProducts();
-      const orderRows =
-        await sql`SELECT payload FROM records WHERE kind='order' ORDER BY payload::jsonb->>'createdAt' DESC LIMIT 200`;
-      const settingsRows =
-        await sql`SELECT data FROM portal_settings WHERE id='social'`;
-      const promos = await sql`SELECT * FROM portal_promos ORDER BY code`;
-      const orders = orderRows
+      // Read the complete dashboard snapshot in one database round trip. The
+      // production database is remote, so several small sequential queries
+      // can exceed Hostinger's gateway timeout on a cold process.
+      const [snapshot] = await sql`
+        SELECT
+          COALESCE((SELECT json_agg(s ORDER BY s.created_at DESC) FROM portal_sales s), '[]'::json) AS sales,
+          COALESCE((SELECT json_agg(json_build_object('id',p.id,'data',p.data)) FROM portal_products p), '[]'::json) AS product_rows,
+          COALESCE((SELECT json_agg(recent.payload) FROM (
+            SELECT payload FROM records WHERE kind='order'
+            ORDER BY payload::jsonb->>'createdAt' DESC LIMIT 200
+          ) recent), '[]'::json) AS order_payloads,
+          COALESCE((SELECT data FROM portal_settings WHERE id='social'), '{"instagram":"","tiktok":""}'::jsonb) AS settings,
+          COALESCE((SELECT json_agg(promo ORDER BY promo.code) FROM portal_promos promo), '[]'::json) AS promos,
+          COALESCE((SELECT json_agg(json_build_object(
+            'id', b.id,
+            'title', b.title,
+            'accent', b.accent,
+            'subtitle', b.subtitle,
+            'cta', b.cta,
+            'href', b.href,
+            'desktopImage', CASE WHEN b.desktop_image LIKE 'data:%'
+              THEN '/api/v1/portal/banner-image/' || b.id || '/desktop?v=' || substr(md5(b.desktop_image),1,12)
+              ELSE b.desktop_image END,
+            'mobileImage', CASE WHEN b.mobile_image LIKE 'data:%'
+              THEN '/api/v1/portal/banner-image/' || b.id || '/mobile?v=' || substr(md5(b.mobile_image),1,12)
+              ELSE b.mobile_image END,
+            'sortOrder', b.sort_order,
+            'active', b.active
+          ) ORDER BY b.sort_order, b.id) FROM portal_banners b), '[]'::json) AS banners
+      `;
+      const sales: any[] = snapshot.sales || [];
+      const productRows: any[] = snapshot.product_rows || [];
+      const catalog = defaults.map((product) => ({
+        ...product,
+        ...productRows.find((row: any) => row.id === product.id)?.data,
+        id: product.id,
+      }));
+      const orderRows: Array<{ payload: any }> = (snapshot.order_payloads || []).map((payload: any) => ({ payload }));
+      const promos: any[] = snapshot.promos || [];
+      const orders: any[] = orderRows
         .map((row) => {
           try {
             return typeof row.payload === 'string'
@@ -334,14 +365,12 @@ export async function portalRequest(req: Request, path: string[], body: any) {
       const lowStockProducts = catalog.filter((product) => product.stock <= 5);
       return {
         email: ADMIN,
-        settings: settingsRows[0]?.data || {instagram:'',tiktok:''},
+        settings: snapshot.settings || {instagram:'',tiktok:''},
         products: catalog,
         sales,
         promos,
-        // Banner image payloads are intentionally loaded only when the admin
-        // opens the banner editor. Keeping them out of login makes /myshop
-        // responsive even when four high-resolution images are stored.
-        banners: [],
+        // Dashboard carries versioned image URLs, never the base64 payloads.
+        banners: snapshot.banners || [],
         analytics: {
           totalRevenue: orders
             .filter(isPaid)

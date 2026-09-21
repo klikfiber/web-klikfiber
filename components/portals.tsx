@@ -421,12 +421,7 @@ export function AdminPortal() {
     try {
       await api('portal/admin/' + path, body);
       setEdit(null);
-      if (path === 'banner') {
-        const banners = await api('portal/admin/banners');
-        setData((current: any) => ({ ...current, banners }));
-      } else {
-        await load();
-      }
+      await load();
       return true;
     } catch (e: any) {
       setError(e.message);
