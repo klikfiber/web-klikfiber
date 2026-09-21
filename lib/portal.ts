@@ -273,13 +273,14 @@ export async function portalRequest(req: Request, path: string[], body: any) {
       return { ok: true };
     }
     if (action === 'admin/overview' && !post) {
-      const [sales, catalog, orderRows, settingsRows, promos] = await Promise.all([
-        sql`SELECT * FROM portal_sales ORDER BY created_at DESC`,
-        liveProducts(),
-        sql`SELECT payload FROM records WHERE kind='order' ORDER BY payload::jsonb->>'createdAt' DESC LIMIT 200`,
-        sql`SELECT data FROM portal_settings WHERE id='social'`,
-        sql`SELECT * FROM portal_promos ORDER BY code`,
-      ]);
+      const sales =
+        await sql`SELECT * FROM portal_sales ORDER BY created_at DESC`;
+      const catalog = await liveProducts();
+      const orderRows =
+        await sql`SELECT payload FROM records WHERE kind='order' ORDER BY payload::jsonb->>'createdAt' DESC LIMIT 200`;
+      const settingsRows =
+        await sql`SELECT data FROM portal_settings WHERE id='social'`;
+      const promos = await sql`SELECT * FROM portal_promos ORDER BY code`;
       const orders = orderRows
         .map((row) => {
           try {
