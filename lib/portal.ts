@@ -273,11 +273,13 @@ export async function portalRequest(req: Request, path: string[], body: any) {
       return { ok: true };
     }
     if (action === 'admin/overview' && !post) {
-      const sales =
-        await sql`SELECT * FROM portal_sales ORDER BY created_at DESC`;
-      const catalog = await liveProducts();
-      const orderRows =
-        await sql`SELECT payload FROM records WHERE kind='order' ORDER BY payload::jsonb->>'createdAt' DESC LIMIT 200`;
+      const [sales, catalog, orderRows, settingsRows, promos] = await Promise.all([
+        sql`SELECT * FROM portal_sales ORDER BY created_at DESC`,
+        liveProducts(),
+        sql`SELECT payload FROM records WHERE kind='order' ORDER BY payload::jsonb->>'createdAt' DESC LIMIT 200`,
+        sql`SELECT data FROM portal_settings WHERE id='social'`,
+        sql`SELECT * FROM portal_promos ORDER BY code`,
+      ]);
       const orders = orderRows
         .map((row) => {
           try {
@@ -331,10 +333,10 @@ export async function portalRequest(req: Request, path: string[], body: any) {
       const lowStockProducts = catalog.filter((product) => product.stock <= 5);
       return {
         email: ADMIN,
-        settings: (await sql`SELECT data FROM portal_settings WHERE id='social'`)[0]?.data || {instagram:'',tiktok:''},
+        settings: settingsRows[0]?.data || {instagram:'',tiktok:''},
         products: catalog,
         sales,
-        promos: await sql`SELECT * FROM portal_promos ORDER BY code`,
+        promos,
         // Banner image payloads are intentionally loaded only when the admin
         // opens the banner editor. Keeping them out of login makes /myshop
         // responsive even when four high-resolution images are stored.
