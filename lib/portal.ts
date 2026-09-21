@@ -412,8 +412,14 @@ export async function portalRequest(req: Request, path: string[], body: any) {
         },
       };
     }
-    if (action === 'admin/banners' && !post)
-      return sql`SELECT id,title,accent,subtitle,cta,href,desktop_image AS "desktopImage",mobile_image AS "mobileImage",sort_order AS "sortOrder",active FROM portal_banners ORDER BY sort_order,id`;
+    if (action === 'admin/banners' && !post) {
+      const rows = await sql`SELECT id,title,accent,subtitle,cta,href,desktop_image AS "desktopImage",mobile_image AS "mobileImage",sort_order AS "sortOrder",active FROM portal_banners ORDER BY sort_order,id`;
+      return rows.map((banner) => ({
+        ...banner,
+        desktopImage: publicBannerImageUrl(banner.id, 'desktop', banner.desktopImage),
+        mobileImage: publicBannerImageUrl(banner.id, 'mobile', banner.mobileImage),
+      }));
+    }
     if (action === 'admin/settings' && post) {
       const clean = (value:unknown,host:string) => { if(!value)return ''; let url:URL; try{url=new URL(String(value));}catch{throw new BusinessError('Masukkan URL lengkap.');} if(url.protocol!=='https:' || ![host,'www.'+host].includes(url.hostname) || url.username || url.password)throw new BusinessError('Gunakan tautan HTTPS '+host); return url.toString(); };
       const data={instagram:clean(body.instagram,'instagram.com'),tiktok:clean(body.tiktok,'tiktok.com')};
@@ -481,7 +487,10 @@ export async function portalRequest(req: Request, path: string[], body: any) {
       const existing = await sql`SELECT desktop_image,mobile_image FROM portal_banners WHERE id=${bannerId}`;
       if (!existing.length) throw new BusinessError('Banner tidak ditemukan.', 404);
       const processImage = async (value: unknown, width: number, height: number, fallback: string) => {
-        const image = String(value || fallback);
+        const submitted = String(value || '');
+        const image = submitted.startsWith(`/api/v1/portal/banner-image/${encodeURIComponent(bannerId)}/`)
+          ? fallback
+          : String(value || fallback);
         if (image.startsWith('/') || /^https:\/\//.test(image)) return image;
         if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(image) || image.length > 6500000)
           throw new BusinessError('Gunakan gambar PNG, JPG, atau WebP maksimal 4 MB.');
