@@ -1,5 +1,6 @@
 import 'server-only';
-import postgres from 'postgres';
+import { Buffer } from 'node:buffer';
+import { database as sql } from './database-client';
 import sharp from 'sharp';
 type PhotoPipeline = {
   rotate(): PhotoPipeline;
@@ -26,11 +27,6 @@ import { products as defaults, type Product, categories } from './catalog';
 import { authServer } from './auth/server';
 import { BusinessError } from './commerce';
 
-const sql = postgres(process.env.DATABASE_URL!, {
-  ssl: 'require',
-  max: 3,
-  prepare: false,
-});
 const ADMIN = 'klikfiber@gmail.com';
 const COOKIE = 'klikfiber-admin';
 let initialized: Promise<unknown> | undefined;
@@ -94,9 +90,9 @@ export async function initPortal() {
   await initialized;
 }
 export async function isPortalAdmin() {
-  await initPortal();
   const token = (await cookies()).get(COOKIE)?.value;
   if (!token) return false;
+  await initPortal();
   const rows =
     await sql`SELECT 1 FROM portal_sessions WHERE token_hash=${createHash('sha256').update(token).digest('hex')} AND expires_at>now()`;
   return !!rows.length;
@@ -182,42 +178,46 @@ function publicBannerImageUrl(
   source: string,
 ) {
   if (!source.startsWith('data:')) return source;
-  const revision = createHash('sha1').update(source).digest('hex').slice(0, 12);
+  const revision = createHash('md5').update(source).digest('hex').slice(0, 12);
   return `/api/v1/portal/banner-image/${encodeURIComponent(id)}/${variant}?v=${revision}`;
 }
 
-export async function portalBannerImage(id: string, variant: string) {
+export async function portalBannerImage(id: string, variant: string, revision?: string | null) {
   await initPortal();
   if (!/^[a-zA-Z0-9_-]{1,80}$/.test(id) || !['desktop', 'mobile'].includes(variant))
     throw new BusinessError('Gambar banner tidak ditemukan.', 404);
   const column = variant === 'desktop' ? 'desktop_image' : 'mobile_image';
   const [row] = await sql.unsafe(
-    `SELECT ${column} AS image FROM portal_banners WHERE id=$1 AND active=true`,
+    `SELECT ${column} AS image,active FROM portal_banners WHERE id=$1`,
     [id],
   );
+  if (row && !row.active && !(await isPortalAdmin())) throw new BusinessError('Gambar banner tidak ditemukan.',404);
   const source = String(row?.image || '');
   const match = source.match(/^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/);
   if (!match) throw new BusinessError('Gambar banner tidak ditemukan.', 404);
+  const currentRevision = createHash('md5').update(source).digest('hex').slice(0,12);
+  if (revision && revision !== currentRevision) return new Response(null, {
+    status:307, headers:{Location:`/api/v1/portal/banner-image/${id}/${variant}?v=${currentRevision}`, 'Cache-Control':'no-store'},
+  });
   return new Response(Buffer.from(match[2], 'base64'), {
     headers: {
       'Content-Type': `image/${match[1]}`,
-      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Cache-Control': row.active && revision ? 'public, max-age=86400, must-revalidate' : 'private, no-store',
     },
   });
 }
 
 export async function portalRequest(req: Request, path: string[], body: any) {
+  const cookieDomain = ['klikfiber.id','www.klikfiber.id'].includes(new URL(req.url).hostname) ? '.klikfiber.id' : undefined;
   await initPortal();
   const action = path.slice(1).join('/'),
     post = req.method === 'POST';
   if (action === 'settings' && !post) { const [row] = await sql`SELECT data FROM portal_settings WHERE id='social'`; return row?.data || {instagram:'',tiktok:''}; }
   if (action === 'banners' && !post) {
-    const rows = await sql`SELECT id,title,accent,subtitle,cta,href,desktop_image AS "desktopImage",mobile_image AS "mobileImage",sort_order AS "sortOrder" FROM portal_banners WHERE active=true ORDER BY sort_order,id`;
-    return rows.map((banner) => ({
-      ...banner,
-      desktopImage: publicBannerImageUrl(banner.id, 'desktop', banner.desktopImage),
-      mobileImage: publicBannerImageUrl(banner.id, 'mobile', banner.mobileImage),
-    }));
+    return sql`SELECT id,href,sort_order AS "sortOrder",
+      CASE WHEN desktop_image LIKE 'data:%' THEN '/api/v1/portal/banner-image/' || id || '/desktop?v=' || substr(md5(desktop_image),1,12) ELSE desktop_image END AS "desktopImage",
+      CASE WHEN mobile_image LIKE 'data:%' THEN '/api/v1/portal/banner-image/' || id || '/mobile?v=' || substr(md5(mobile_image),1,12) ELSE mobile_image END AS "mobileImage"
+      FROM portal_banners WHERE active=true ORDER BY sort_order,id`;
   }
   if (action === 'admin/login' && post) {
     const email = String(body.email || '')
@@ -255,8 +255,7 @@ export async function portalRequest(req: Request, path: string[], body: any) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      domain:
-        process.env.NODE_ENV === 'production' ? '.klikfiber.id' : undefined,
+      domain: cookieDomain,
       path: '/',
       maxAge: 28800,
     });
@@ -269,7 +268,11 @@ export async function portalRequest(req: Request, path: string[], body: any) {
       const jar = await cookies();
       const token = jar.get(COOKIE)?.value || '';
       await sql`DELETE FROM portal_sessions WHERE token_hash=${createHash('sha256').update(token).digest('hex')}`;
-      jar.delete(COOKIE);
+      jar.set(COOKIE, '', {
+        httpOnly: true, secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax', path: '/', maxAge: 0,
+        domain: cookieDomain,
+      });
       return { ok: true };
     }
     if (action === 'admin/overview' && !post) {
@@ -518,6 +521,7 @@ export async function portalRequest(req: Request, path: string[], body: any) {
       if (!existing.length) throw new BusinessError('Banner tidak ditemukan.', 404);
       const processImage = async (value: unknown, width: number, height: number, fallback: string) => {
         const submitted = String(value || '');
+        if (!submitted || submitted === fallback || submitted.startsWith(`/api/v1/portal/banner-image/${encodeURIComponent(bannerId)}/`)) return fallback;
         const image = submitted.startsWith(`/api/v1/portal/banner-image/${encodeURIComponent(bannerId)}/`)
           ? fallback
           : String(value || fallback);

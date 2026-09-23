@@ -1867,7 +1867,7 @@ export function Information({ page }: { page: string }) {
       {promo ? (
         <div className="promo-card panel"><Gift size={43}/><span className="kicker">PENAWARAN KLIKFIBER</span><h2>Lebih banyak kebutuhan, lebih tepat penawarannya.</h2><p>Hubungi tim kami untuk harga volume dan informasi promo yang berlaku pada pesanan Anda.</p><Btn href="/penawaran">Konsultasikan kebutuhan</Btn></div>
       ) : legal ? (
-        <div className="panel prose"><h2>{page==='/privasi'?'Privasi pelanggan':'Informasi pemesanan'}</h2><p>Harga, ketersediaan, pengiriman, dan ketentuan garansi dikonfirmasi dalam penawaran sebelum pembayaran. Pembayaran otomatis belum tersedia.</p><p>Keranjang dan favorit tersimpan pada perangkat. Akun diverifikasi melalui Supabase Auth. Data yang Anda kirim melalui formulir disimpan untuk menangani permintaan Anda.</p><p>Untuk pertanyaan atau permintaan terkait data, hubungi <a href="mailto:klikfiber@gmail.com">klikfiber@gmail.com</a>.</p></div>
+        <div className="panel prose"><h2>{page==='/privasi'?'Privasi pelanggan':'Informasi pemesanan'}</h2><p>Harga produk, potongan, dan ongkir ditampilkan pada ringkasan checkout sebelum pembayaran. Pembayaran diproses melalui Midtrans; status pesanan diperbarui setelah konfirmasi dari penyedia pembayaran.</p><p>Keranjang dan favorit tersimpan pada perangkat. Akun diverifikasi melalui Supabase Auth. Data yang Anda kirim melalui formulir disimpan untuk menangani permintaan Anda.</p><p>Untuk pertanyaan atau permintaan terkait data, hubungi <a href="mailto:klikfiber@gmail.com">klikfiber@gmail.com</a>.</p></div>
       ) : (
         <>
           <div className="info-cards">

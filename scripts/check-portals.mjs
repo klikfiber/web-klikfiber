@@ -58,7 +58,7 @@ try {
   assert.equal(overview.r.status, 200);
   assert.ok(overview.j.data.products.length > 0);
   const p = overview.j.data.products[0];
-  assert.equal((await request('portal/admin/product', p)).r.status, 200);
+  // Read-only catalogue consistency check: never rewrite a real product as a fixture.
   const listing = await request('products', null, false);
   assert.equal(listing.j.data.find((x) => x.id === p.id).price, p.price);
   await sql`INSERT INTO portal_sales(id,email,name,phone) VALUES(${fixture},'qc@example.invalid','QC Portal','081234567890')`;
@@ -80,7 +80,7 @@ try {
   );
   const [approved] = await sql`SELECT * FROM portal_sales WHERE id=${fixture}`;
   assert.equal(approved.status, 'approved');
-  assert.match(approved.code, /^KFS[A-Z0-9]+$/);
+  assert.match(approved.code, /^KLIK[0-9]+$/);
   assert.equal(
     (
       await request('portal/admin/sales', {

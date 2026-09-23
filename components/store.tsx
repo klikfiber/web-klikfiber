@@ -1,4 +1,6 @@
 'use client';
+import { productMedia } from '@/lib/product-media';
+import { isStoreRoute } from '@/lib/store-routes';
 import {
   useEffect,
   useRef,
@@ -9,8 +11,10 @@ import {
 } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import ProductGallery from './product-gallery';
-import {AdminPortal,SalesArea} from './portals';
+import dynamic from 'next/dynamic';
+const ProductGallery = dynamic(() => import('./product-gallery'), { loading: () => <div className="gallery-placeholder" role="status">Memuat foto produk…</div> });
+const AdminPortal = dynamic(() => import('./portals').then(m => m.AdminPortal), { loading: () => <main className="container page" role="status">Memuat ruang admin…</main> });
+const SalesArea = dynamic(() => import('./portals').then(m => m.SalesArea), { loading: () => <main className="container page" role="status">Memuat area sales…</main> });
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowRight,
@@ -65,14 +69,10 @@ import {
   type Product,
   type CartItem,
 } from '@/lib/catalog';
-import {
-  Checkout,
-  Account,
-  Backoffice,
-  QuoteForm,
-  Information,
-  SalesPortal,
-} from '@/components/workflows';
+const Checkout = dynamic(() => import('./workflows').then(m => m.Checkout));
+const Account = dynamic(() => import('./workflows').then(m => m.Account));
+const QuoteForm = dynamic(() => import('./workflows').then(m => m.QuoteForm));
+const Information = dynamic(() => import('./workflows').then(m => m.Information));
 export async function api(path: string, body?: unknown) {
   const r = await fetch('/api/v1/' + path, {
     method: body ? 'POST' : 'GET',
@@ -80,7 +80,10 @@ export async function api(path: string, body?: unknown) {
     cache: 'no-store',
     headers: { 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(20000),
   });
+  if (!r.headers.get('content-type')?.includes('application/json'))
+    throw new Error('Layanan belum merespons. Coba kembali beberapa saat lagi.');
   const j: any = await r.json();
   if (!r.ok)
     throw new Error(j.message || 'Terjadi kendala. Silakan coba lagi.');
@@ -107,7 +110,7 @@ export const useStore = () => useContext(Context);
 export function Logo() {
   return (
     <Link className="logo" href="/" aria-label="KLIKFIBER beranda">
-      <img src="/images/klikfiber-playful.png" alt="klikfiber.id — Klik, sambung, beres!" width={3200} height={1600} />
+      <img src="/images/optimized/klikfiber-logo.webp" alt="klikfiber.id — Klik, sambung, beres!" width={640} height={320} />
     </Link>
   );
 }
@@ -125,7 +128,7 @@ export function ProductImage({
         role="img"
         aria-label={p.name}
       >
-        <img className="direct-product-image" src={p.imageSrc} alt={p.name} />
+        <img className="direct-product-image" src={productMedia(p.imageSrc)} alt={p.name} width={600} height={600} loading={large ? 'eager' : 'lazy'} decoding="async" />
       </div>
     );
   }
@@ -162,7 +165,8 @@ export function ProductImage({
         }}
       >
         <img
-          src={'/images/' + file + '.png'}
+          src={'/images/optimized/' + file + '.webp'}
+          loading={large ? 'eager' : 'lazy'}
           alt=""
           draggable={false}
           style={{
@@ -238,7 +242,7 @@ export function Quantity({
 export function ProductCard({ p }: { p: Product }) {
   const s = useStore();
   return (
-    <article className="product-card">
+    <article className={"product-card" + (p.category === "Fusion Splicer" ? " splicer-card" : "")} data-product={p.id}>
       <Link href={'/produk/' + p.id} className="product-visual">
         <ProductImage p={p} />
       </Link>
@@ -284,7 +288,7 @@ export function ProductCard({ p }: { p: Product }) {
             }
             disabled={!p.stock && !p.quote}
           >
-            {p.quote ? <FileText size={19} /> : <ShoppingCart size={19} />}
+            {p.quote ? <FileText size={19} /> : <ShoppingCart size={19} />}<span>{p.quote ? "Penawaran" : "Tambah"}{!p.quote && <span className="cart-label-long"> ke Keranjang</span>}</span>
           </button>
         </div>
       </div>
@@ -348,16 +352,20 @@ function Home() {
  const [bannerIndex,setBannerIndex]=useState(0);
  const bannerRef=useRef<HTMLDivElement>(null);
  const [banners,setBanners]=useState<any[] | null>(null);
- useEffect(()=>{void api('portal/banners').then((items)=>{if(Array.isArray(items))setBanners(items);}).catch(()=>undefined);},[]);
+ const [bannerError,setBannerError]=useState(false);
+ const loadBanners=()=>{setBannerError(false);void api('portal/banners').then((items)=>{if(Array.isArray(items))setBanners(items);else throw new Error('Invalid banners');}).catch(()=>setBannerError(true));};
+ useEffect(()=>{loadBanners();const update=()=>loadBanners();window.addEventListener('focus',update);return()=>window.removeEventListener('focus',update);},[]);
  const [categoryPaused,setCategoryPaused]=useState(false);
  const categoryRef=useRef<HTMLDivElement>(null);
  useEffect(()=>{if(categoryPaused || matchMedia('(prefers-reduced-motion: reduce)').matches)return;const timer=setInterval(()=>{const el=categoryRef.current;if(el)el.scrollTo({left:el.scrollLeft+130>=el.scrollWidth-el.clientWidth?0:el.scrollLeft+130,behavior:'smooth'});},3500);return()=>clearInterval(timer);},[categoryPaused]);
  return (<>
+      <h1 className="sr-only">Splicer dan perlengkapan fiber optik Klikfiber.id</h1>
       <section className="play-hero" aria-label="Inspirasi koneksi" aria-roledescription="carousel">
         <div className="play-track" ref={bannerRef} aria-busy={banners === null} onScroll={()=>{const el=bannerRef.current;if(el)setBannerIndex(Math.round(el.scrollLeft/el.clientWidth));}}>
-          {banners === null && <article className="play-slide banner-skeleton" aria-label="Memuat banner terbaru" />}
+          {banners === null && !bannerError && <article className="play-slide banner-skeleton" aria-label="Memuat banner terbaru" />}
+          {bannerError && <div className="banner-error" role="status">Banner belum termuat. <button type="button" onClick={loadBanners}>Coba lagi</button><Link href="/produk">Lihat produk</Link></div>}
           {banners?.map((b,i)=><article className="play-slide" data-banner={b.id} key={b.id} aria-label={`${i+1} dari ${banners.length}`} aria-roledescription="slide">
-            <Link className="banner-image-link" href={b.href} aria-label={`Lihat penawaran banner ${i+1}`}><picture><source media="(max-width: 767px)" srcSet={b.mobileImage}/><img className="play-art" src={b.desktopImage} alt={`Pilihan Klikfiber ${i+1}`} loading={i === 0 ? 'eager' : 'lazy'} /></picture></Link>
+            <Link className="banner-image-link" href={b.href} aria-label={`Lihat penawaran banner ${i+1}`}><picture><source media="(max-width: 767px)" srcSet={b.mobileImage}/><img className="play-art" src={b.desktopImage} alt={`Pilihan Klikfiber ${i+1}`} width={1600} height={640} decoding="async" fetchPriority={i === 0 ? 'high' : 'auto'} loading={i === 0 ? 'eager' : 'lazy'} /></picture></Link>
           </article>)}
         </div>
           {banners && <div className="play-pagination"><span>Geser, temukan yang cocok <ArrowRight size={14}/></span><div>{banners.map((b,i)=><button key={b.id} aria-label={`Lihat banner ${i+1}`} aria-pressed={bannerIndex===i} onClick={()=>bannerRef.current?.scrollTo({left:i*bannerRef.current.clientWidth,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'})}/>)}</div></div>}
@@ -377,14 +385,12 @@ function Home() {
               [Package, 6, 'Closure & ODP', 'Lindungi sambungan'],
               [Wrench, 7, 'Tools & Splicing', 'Siap instalasi'],
               [SlidersHorizontal, 2, 'Alat Uji & Monitoring', 'Ukur & pastikan'],
-            ].map(([Icon, c, title, hint]: any) => (
+            ].map(([, c, title, hint]: any, index) => (
               <Link
                 key={title}
                 href={'/produk?kategori=' + encodeURIComponent(categories[c])}
               >
-                <span>
-                  <Icon size={29} />
-                </span>
+                <span className={"category-art category-art-" + index} aria-hidden="true" />
                 <small>{hint}</small>
                 <strong>{title}</strong>
                 <ChevronRight size={16} />
@@ -873,7 +879,7 @@ function Storefront() {
     router.prefetch('/akun');
   }, [router]);
   async function refresh() {
-    try {setCatalog(await api('products'));}catch{}
+    const catalogRequest=api('products').then(setCatalog).catch(()=>undefined);
     try {
       const current=await api('me');
       setProfile(current);
@@ -881,6 +887,7 @@ function Storefront() {
     } catch {
       setProfile(null);
     }
+    await catalogRequest;
   }
   const state: State = {
     products:catalog,
@@ -892,11 +899,6 @@ function Storefront() {
     clearCart: () => setCart([]),
     login: () => router.push('/akun'),
     add: (p, qty = 1) => {
-      if (!profile) {
-        router.push('/akun');
-
-        return false;
-      }
       if (!p.stock || p.quote) return false;
       const quantity = cart.find(x => x.id === p.id)?.qty || 0;
       if (quantity + qty > Math.min(99, p.stock)) {
@@ -1000,7 +1002,7 @@ function Storefront() {
             </Link>
           </nav>
         </header></>}
-        <div id="main">
+        <div id="main" role={path === "/" ? "main" : undefined}>
           {path === '/' ? (
             <Home />
           ) : path === '/produk' ? (
@@ -1034,7 +1036,7 @@ function Storefront() {
                 <br />
                 Teman belanja kebutuhan koneksi.
               </p>
-              <div className="social-links" aria-label="Media sosial KLIKFIBER">{social.instagram && <a href={social.instagram} target="_blank" rel="noopener noreferrer">Instagram ↗</a>}{social.tiktok && <a href={social.tiktok} target="_blank" rel="noopener noreferrer">TikTok ↗</a>}</div><div className="footer-tag">Dari satu klik, jadi banyak koneksi.</div>
+              <div className="social-links" role="group" aria-label="Media sosial KLIKFIBER">{social.instagram && <a href={social.instagram} target="_blank" rel="noopener noreferrer">Instagram ↗</a>}{social.tiktok && <a href={social.tiktok} target="_blank" rel="noopener noreferrer">TikTok ↗</a>}</div><div className="footer-tag">Dari satu klik, jadi banyak koneksi.</div>
             </div>
             {[
               [
@@ -1124,6 +1126,7 @@ function Storefront() {
 
 export default function Store() {
   const path = usePathname();
+  if (!isStoreRoute(path)) return null;
   if (
     path.startsWith('/myshop') ||
     path.startsWith('/admin') ||

@@ -4,10 +4,11 @@ import useEmblaCarousel from 'embla-carousel-react';
 import { ChevronLeft, ChevronRight, ZoomIn } from 'lucide-react';
 import type PhotoSwipe from 'photoswipe';
 import type { Product } from '@/lib/catalog';
+import { productMedia } from '@/lib/product-media';
 import 'photoswipe/style.css';
 
 export default function ProductGallery({ product }: { product: Product }) {
-  const images = useMemo(() => [...new Set([product.imageSrc, ...(product.gallery || [])].filter((src): src is string => !!src))].slice(0, 8), [product.imageSrc, product.gallery]);
+  const images = useMemo(() => [...new Set([product.imageSrc, ...(product.gallery || [])].filter((src): src is string => !!src).map(productMedia))].slice(0, 8), [product.imageSrc, product.gallery]);
   const [viewport, carousel] = useEmblaCarousel({ loop: false });
   const [selected, setSelected] = useState(0);
   const [opening, setOpening] = useState(false);

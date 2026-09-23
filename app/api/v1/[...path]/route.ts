@@ -1,12 +1,14 @@
+import { reserveOrderStock, restoreOrderStock } from '@/lib/order-stock';
 import { authServer } from '@/lib/auth/server';
 import { portalRequest, portalBannerImage, liveProducts, referralCampaign, customerDetails } from '@/lib/portal';
-import postgres from 'postgres';
+import { database as sql } from '@/lib/database-client';
 import { products } from '@/lib/catalog';
 import { BusinessError, validAddress, priceCart } from '@/lib/commerce';
 import { midtransSnap, publicMidtransConfig } from '@/lib/midtrans';
 import {
   isTerminalPaymentStatus,
   mapMidtransStatus,
+  acceptPaymentTransition,
 } from '@/lib/payments/midtrans-status';
 import { createHash, timingSafeEqual } from 'node:crypto';
 const schema = [
@@ -45,7 +47,6 @@ type Row = Record<string, any>;
 type QueryResult<T extends Row = Row> = { results: T[] };
 const connection = process.env.DATABASE_URL;
 if (!connection) throw new Error('DATABASE_URL is required');
-const sql = postgres(connection, { ssl: 'require', max: 5, prepare: false });
 const normalize = <T extends Row>(row: T): T => {
   const value = row as Row;
   if ('countused' in value) value.countUsed = value.countused;
@@ -96,8 +97,12 @@ const database = {
 const db = () => database;
 let initialized: Promise<unknown> | undefined;
 async function init() {
-  initialized ||= db()
-    .batch(schema.map((sql) => db().prepare(sql)))
+  initialized ||= (async () => {
+    const [ready] = await sql`SELECT to_regclass('public.payments') IS NOT NULL
+      AND to_regclass('public.records') IS NOT NULL
+      AND to_regclass('public.idempotency') IS NOT NULL AS ready`;
+    if (!ready.ready) await db().batch(schema.map((statement) => db().prepare(statement)));
+  })()
     .catch((e) => {
       initialized = undefined;
       throw e;
@@ -187,6 +192,23 @@ async function seed(owner: string) {
   ]);
 }
 async function release(owner: string, o: any, status: string) {
+  if (o.stockSource === 'portal') {
+    return sql.begin(async (tx: any) => {
+      const [row] = await tx`SELECT payload FROM records WHERE id=${o.id} AND owner=${owner} AND kind='order' FOR UPDATE`;
+      if (!row) throw new BusinessError('Pesanan tidak ditemukan.', 404);
+      const current = JSON.parse(row.payload);
+      if (current.status !== 'awaiting_payment' || current.paymentStatus === 'paid')
+        throw new BusinessError('Pesanan ini tidak dapat dibatalkan.', 409);
+      const attempts = await tx`SELECT id FROM payments WHERE order_id=${o.id} AND status IN ('creating','pending','paid') LIMIT 1`;
+      if (attempts.length) throw new BusinessError('Pembayaran sedang berlangsung. Tunggu status pembayaran sebelum membatalkan.', 409);
+      if (current.stockReserved) {
+        await restoreOrderStock(tx,current.items);
+      }
+      const next = {...current,status,stockReserved:false};
+      await tx`UPDATE records SET payload=${JSON.stringify(next)} WHERE id=${o.id} AND owner=${owner}`;
+      return next;
+    });
+  }
   if (o.status !== 'awaiting_payment')
     throw new BusinessError('Pesanan ini tidak dapat dibatalkan.', 409);
   const next = { ...o, status };
@@ -254,8 +276,12 @@ async function createMidtransPayment(owner: string, profile: any, order: any) {
   const { total } = validateOrderAmount(order);
 
   const payment = await sql.begin(async (transaction: any) => {
+    const [lockedOrder] = await transaction`SELECT payload FROM records WHERE id=${order.id} AND owner=${owner} AND kind='order' FOR UPDATE`;
+    const current = lockedOrder && JSON.parse(lockedOrder.payload);
+    if (!current || current.status !== 'awaiting_payment' || Date.parse(current.expiresAt) <= Date.now())
+      throw new BusinessError('Pesanan tidak dapat dibayar. Muat ulang status pesanan.',409);
     const [active] = await transaction`SELECT * FROM payments WHERE active_key=${order.id} LIMIT 1`;
-    if (active) return active;
+    if (active) return { ...active, reused: true };
     const [attempt] = await transaction`SELECT count(*)::int AS count FROM payments WHERE order_id=${order.id}`;
     const paymentId = id();
     const providerOrderId = `${order.number}-P${Number(attempt.count) + 1}`;
@@ -265,10 +291,11 @@ async function createMidtransPayment(owner: string, profile: any, order: any) {
       ON CONFLICT(active_key) DO NOTHING RETURNING *`;
     if (created) return created;
     const [concurrent] = await transaction`SELECT * FROM payments WHERE active_key=${order.id} LIMIT 1`;
-    return concurrent;
+    return concurrent ? { ...concurrent, reused: true } : null;
   });
   if (!payment) throw new BusinessError('Pembayaran sedang disiapkan. Coba lagi.', 409);
   if (payment.snap_token) return paymentView(payment);
+  if (payment.reused) throw new BusinessError('Pembayaran sedang disiapkan. Coba lagi beberapa saat.',409);
   if (payment.status !== 'creating')
     throw new BusinessError('Buat ulang pembayaran untuk melanjutkan.', 409);
 
@@ -353,10 +380,12 @@ async function handleMidtransWebhook(payload: any) {
   const status = mapMidtransStatus(String(verified.transaction_status), String(verified.fraud_status || ''));
 
   await sql.begin(async (transaction: any) => {
+    // Match payment creation/cancellation lock order to avoid deadlocks.
+    const [orderRow] = await transaction`SELECT payload FROM records WHERE id=${payment.order_id} AND owner=${payment.owner} AND kind='order' FOR UPDATE`;
     const [locked] = await transaction`SELECT * FROM payments WHERE id=${payment.id} FOR UPDATE`;
-    const [orderRow] = await transaction`SELECT payload FROM records WHERE id=${locked.order_id} AND owner=${locked.owner} AND kind='order' FOR UPDATE`;
     if (!orderRow) throw new BusinessError('Pesanan pembayaran tidak ditemukan.', 404);
     const order = JSON.parse(orderRow.payload);
+    if (!acceptPaymentTransition(locked.status, status)) return;
     const transactionId = String(verified.transaction_id || locked.provider_transaction_id || '') || null;
     await transaction`
       UPDATE payments SET status=${status},provider_transaction_id=${transactionId},payment_type=${String(verified.payment_type || '') || null},
@@ -366,9 +395,12 @@ async function handleMidtransWebhook(payload: any) {
       WHERE id=${locked.id}`;
 
     if (status === 'paid' && order.paymentStatus !== 'paid') {
+      // A late paid notification must not silently sell inventory already
+      // returned after expiration. Keep an explicit review state.
+      const latePayment = order.stockSource === 'portal' && !order.stockReserved;
       const paid = {
         ...order,
-        status: 'confirmed',
+        status: latePayment ? 'payment_review' : 'confirmed',
         paymentStatus: 'paid',
         paymentProvider: 'midtrans',
         providerTransactionId: transactionId,
@@ -378,9 +410,14 @@ async function handleMidtransWebhook(payload: any) {
       await transaction`UPDATE records SET payload=${JSON.stringify(paid)} WHERE id=${order.id} AND owner=${locked.owner}`;
       if (order.code && !order.portalReferral)
         await transaction`UPDATE campaigns SET reserved=reserved-${order.discount},used=used+${order.discount},countReserved=countReserved-1,countUsed=countUsed+1 WHERE owner=${locked.owner} AND code=${order.code} AND countReserved>0`;
-    } else if (status !== 'paid' && order.paymentStatus !== 'paid') {
+    } else if (status !== 'paid') {
+      const terminalFailure = ['failed','cancelled','expired'].includes(status);
+      if (terminalFailure && order.stockSource === 'portal' && order.stockReserved) {
+        await restoreOrderStock(transaction,order.items);
+      }
       const next = {
         ...order,
+        ...(terminalFailure ? {status:status === 'expired' ? 'expired' : 'canceled',stockReserved:false} : {}),
         paymentStatus: status,
         paymentProvider: 'midtrans',
         providerTransactionId: transactionId,
@@ -403,7 +440,7 @@ async function handle(req: Request) {
     path[2] &&
     path[3]
   )
-    return portalBannerImage(path[2], path[3]);
+    return portalBannerImage(path[2], path[3], url.searchParams.get('v'));
   if (isPost) {
     const origin = req.headers.get('origin');
     if (origin) {
@@ -446,21 +483,21 @@ async function handle(req: Request) {
       throw new BusinessError('Midtrans belum dikonfigurasi.', 503);
     }
   }
-  const products=await liveProducts();
+  if (path[0] === 'products') {
+    const catalog = await liveProducts();
+    return respond(path[1] ? catalog.find(p => p.id === path[1]) || null : catalog);
+  }
   if (rpath === 'auth/demo' || rpath === 'auth/demo-role' || path.includes('simulate-payment')) throw new BusinessError('Layanan tidak tersedia.', 410);
   const auth = await authServer();
   const { data: { user } } = await auth.auth.getUser();
   const staffRole = undefined;
   const session = user ? { id: user.id, profile: JSON.stringify({id:user.id,name:user.user_metadata?.full_name || user.email?.split('@')[0] || 'Pelanggan',email:user.email,staffRole}) } : null;
-  if (path[0] === 'products')
-    return respond(
-      path[1] ? products.find((p) => p.id === path[1]) || null : products,
-    );
   if (!session)
     throw new BusinessError('Silakan masuk atau daftar terlebih dahulu.', 401);
   const owner = session.id as string;
   const profile = JSON.parse(session.profile);
   const r = path.join('/');
+  const products = ['checkout','shipping','orders'].includes(path[0]) ? await liveProducts() : [];
   if (r === 'payments/midtrans/create' && isPost) {
     const order = await record(owner, str(body.orderId, 10, 100), 'order');
     return respond(await createMidtransPayment(owner, profile, order), 201);
@@ -488,12 +525,15 @@ async function handle(req: Request) {
     return respond(result.pricing || []);
   }
   if (r === 'sales/profile') {
+    throw new BusinessError('Gunakan pendaftaran sales melalui /sales dan tunggu persetujuan admin.',410);
+    /* Legacy profile creation is intentionally unreachable.
     const current = (await records(owner, 'sales_profile'))[0] || null;
     if (!isPost) return respond(current);
     if (current) return respond(current);
     const sales = { id: owner + '-sales', code: 'KFS' + owner.replace(/-/g, '').slice(0, 7).toUpperCase(), name: str(body.name, 2, 100), phone: str(body.phone, 9, 16), city: str(body.city, 2, 100), status: 'active', createdAt: now() };
     await save(owner, 'sales_profile', sales).run();
     return respond(sales, 201);
+    */
   }
   if (r === 'sales/referrals') {
     const sales = (await records(owner, 'sales_profile'))[0];
@@ -654,46 +694,26 @@ async function handle(req: Request) {
       createdAt: now(),
       expiresAt: new Date(Date.now() + 60 * 60000).toISOString(),
       refunded: 0,
+      stockSource: 'portal',
+      stockReserved: true,
     };
-    const stmts = [
-      ...guard(
-        'NOT EXISTS(SELECT 1 FROM idempotency WHERE owner=? AND fingerprint=?)',
-        [owner, q.id],
-      ),
-    ];
-    for (const p of o.items)
-      stmts.push(
-        ...guard(
-          'SELECT stock-reserved>=? FROM inventory WHERE owner=? AND id=?',
-          [p.qty, owner, p.id],
-        ),
-        db()
-          .prepare(
-            'UPDATE inventory SET reserved=reserved+? WHERE owner=? AND id=?',
-          )
-          .bind(p.qty, owner, p.id),
-      );
-    if (o.code && !o.portalReferral)
-      stmts.push(
-        ...guard(
-          "SELECT status='active' AND used+reserved+?<=budget AND countUsed+countReserved<quota FROM campaigns WHERE owner=? AND code=?",
-          [o.discount, owner, o.code],
-        ),
-        db()
-          .prepare(
-            'UPDATE campaigns SET reserved=reserved+?,countReserved=countReserved+1 WHERE owner=? AND code=?',
-          )
-          .bind(o.discount, owner, o.code),
-      );
-    stmts.push(
-      save(owner, 'order', o),
-      db()
-        .prepare('INSERT INTO idempotency VALUES(?,?,?,?)')
-        .bind(owner, body.requestId, q.id, o.id),
-      audit(owner, 'customer', 'order.created', o.number),
-    );
     try {
-      await db().batch(stmts);
+      const saved = await sql.begin(async (tx: any) => {
+        // A quote lock serializes double clicks, including different request IDs.
+        const [lockedQuote] = await tx`SELECT payload FROM records WHERE id=${q.id} AND owner=${owner} AND kind='checkout' FOR UPDATE`;
+        if (!lockedQuote || JSON.stringify(JSON.parse(lockedQuote.payload)) !== JSON.stringify(q))
+          throw new BusinessError('Pilihan pengiriman berubah. Periksa ringkasan pesanan kembali.',409);
+        const [previous] = await tx`SELECT recordid FROM idempotency WHERE owner=${owner} AND fingerprint=${q.id} LIMIT 1`;
+        if (previous) {
+          const [row] = await tx`SELECT payload FROM records WHERE id=${previous.recordid} AND owner=${owner}`;
+          return JSON.parse(row.payload);
+        }
+        await reserveOrderStock(tx,o.items);
+        await tx`INSERT INTO records(id,owner,kind,payload) VALUES(${o.id},${owner},'order',${JSON.stringify(o)})`;
+        await tx`INSERT INTO idempotency(owner,key,fingerprint,recordid) VALUES(${owner},${body.requestId},${q.id},${o.id})`;
+        return o;
+      });
+      return respond(saved, 201);
     } catch {
       const concurrent = await db()
         .prepare('SELECT * FROM idempotency WHERE owner=? AND key=?')
@@ -1144,8 +1164,8 @@ async function route(req: Request) {
   try {
     return await handle(req);
   } catch (e) {
-    console.error('KLIKFIBER API error', e);
     const known = e instanceof BusinessError;
+    if (!known) console.error('KLIKFIBER API request failed', { path:new URL(req.url).pathname, type:e instanceof Error ? e.name : 'UnknownError' });
     return Response.json(
       {
         code: known ? 'VALIDATION_ERROR' : 'CONFLICT',

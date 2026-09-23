@@ -24,3 +24,14 @@ export function mapMidtransStatus(
 
 export const isTerminalPaymentStatus = (status: PaymentStatus) =>
   ['paid', 'failed', 'cancelled', 'expired', 'refunded'].includes(status);
+
+// Provider callbacks can arrive twice or out of order. Never downgrade a
+// settled/refunded payment to pending, nor resurrect a refunded payment.
+export function acceptPaymentTransition(current: string, next: PaymentStatus) {
+  if (current === next) return false;
+  if (current === 'refunded') return false;
+  if (current === 'partially_refunded') return next === 'refunded';
+  if (current === 'paid') return next === 'refunded' || next === 'partially_refunded';
+  if (['failed','cancelled','expired'].includes(current)) return next === 'paid';
+  return true;
+}

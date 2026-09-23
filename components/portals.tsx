@@ -392,7 +392,7 @@ export function AdminPortal() {
       return true;
     } catch (e: any) {
       setData(null);
-      if (showError) setError(e.message);
+      if (showError) setError(e.name === 'TimeoutError' ? 'Koneksi lambat. Silakan coba masuk kembali.' : e.message);
       return false;
     } finally {
       setLoading(false);
@@ -402,13 +402,15 @@ export function AdminPortal() {
     void load();
   }, []);
   useEffect(() => {
+    if (!data) return;
     const timer = window.setInterval(() => {
+      if (document.hidden || busy || edit) return;
       void api('portal/admin/overview')
         .then(setData)
         .catch(() => undefined);
     }, 30000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [!!data, busy, edit]);
   useEffect(() => {
     if (edit)
       document
