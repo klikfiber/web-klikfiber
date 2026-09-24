@@ -22,7 +22,7 @@ import {
   UsersRound,
 } from 'lucide-react';
 
-const readImage = (file: File) =>
+const readImage = (file: File, expectedRatio?: number, sizeLabel?: string) =>
   new Promise<string>((resolve, reject) => {
     if (file.size > 4 * 1024 * 1024) {
       reject(new Error('Ukuran gambar maksimal 4 MB.'));
@@ -33,6 +33,10 @@ const readImage = (file: File) =>
       const image = new Image();
       image.onerror = () => reject(new Error('Format gambar tidak dapat dibaca. Gunakan JPG, PNG, atau WebP.'));
       image.onload = () => {
+        if (expectedRatio && Math.abs(image.width / image.height - expectedRatio) > 0.035) {
+          reject(new Error(`Rasio gambar belum sesuai. Gunakan kanvas ${sizeLabel}.`));
+          return;
+        }
         const scale = Math.min(1, 1920 / Math.max(image.width, image.height));
         const canvas = document.createElement('canvas');
         canvas.width = Math.max(1, Math.round(image.width * scale));
@@ -66,7 +70,8 @@ function BannerManager({
     if (!file) return;
     setFileError('');
     try {
-      const image = await readImage(file);
+      const desktop = key === 'desktopImage';
+      const image = await readImage(file, desktop ? 2.5 : 2, desktop ? '1600 × 640 px (rasio 5:2)' : '800 × 400 px (rasio 2:1)');
       setDraft((current: any) => ({ ...current, [key]: image }));
     } catch (error: any) {
       setFileError(error.message);
@@ -79,6 +84,11 @@ function BannerManager({
           <h2>Banner homepage</h2>
           <p>Empat slide, masing-masing dengan gambar desktop dan mobile.</p>
         </div>
+      </div>
+      <div className="banner-size-guide" aria-label="Panduan ukuran banner">
+        <div><strong>Desktop</strong><b>1600 × 640 px</b><span>Rasio 5:2 · area aman teks 80 px dari tepi</span></div>
+        <div><strong>Mobile</strong><b>800 × 400 px</b><span>Rasio 2:1 · letakkan informasi utama di tengah</span></div>
+        <p>Gunakan JPG, PNG, atau WebP maksimal 4 MB. File dengan rasio yang berbeda akan ditolak agar banner tidak terpotong atau menyisakan ruang kosong.</p>
       </div>
       <div className="banner-admin-grid">
         {banners.map((banner, index) => (
@@ -100,7 +110,7 @@ function BannerManager({
       {draft && (
         <section className="panel portal-editor banner-editor" id="portal-editor" aria-label="Editor banner">
           <div className="portal-heading">
-            <div><h2>Edit {'banner ' + draft.id.replace('hero-','')}</h2><p>Seluruh gambar ditampilkan utuh. Masukkan tulisan promosi langsung di desain gambar.</p></div>
+            <div><h2>Edit {'banner ' + draft.id.replace('hero-','')}</h2><p>Gunakan ukuran sesuai panduan supaya banner memenuhi area desktop dan mobile tanpa terpotong.</p></div>
             <button className="btn outline" onClick={() => setDraft(null)}>Tutup</button>
           </div>
           <form className="stack" onSubmit={async (event) => {
@@ -109,12 +119,12 @@ function BannerManager({
           }}>
             <div className="banner-upload-grid">
               <label className="banner-upload">
-                <span><strong>Versi desktop</strong><small>1600 × 640 px · rasio 5:2 · JPG, PNG, atau WebP</small></span>
+                <span><strong>Versi desktop — ukuran wajib</strong><small>1600 × 640 px · rasio 5:2 · area aman 80 px dari tepi</small></span>
                 <img src={draft.desktopImage} alt="Pratinjau banner desktop" />
                 <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void pick('desktopImage', event.target.files?.[0])} />
               </label>
               <label className="banner-upload mobile-preview">
-                <span><strong>Versi mobile</strong><small>800 × 400 px · rasio 2:1 · JPG, PNG, atau WebP</small></span>
+                <span><strong>Versi mobile — ukuran wajib</strong><small>800 × 400 px · rasio 2:1 · informasi utama di tengah</small></span>
                 <img src={draft.mobileImage} alt="Pratinjau banner mobile" />
                 <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void pick('mobileImage', event.target.files?.[0])} />
               </label>
@@ -944,7 +954,7 @@ export function AdminPortal() {
                     <label>Kategori<select name="category" defaultValue={edit.category}>{categories.slice(1).map(category=><option key={category}>{category}</option>)}</select></label>
                     <label>Berat pengiriman (gram)<input name="weight" type="number" min="1" max="1000000" defaultValue={edit.weight || 1000} required/></label>
                     <label className="product-image-editor">Foto produk<img src={edit.imageSrc} alt="Pratinjau produk" style={{width:150,height:150,objectFit:'contain'}}/><input type="file" accept="image/png,image/jpeg,image/webp" onChange={async e=>{const file=e.target.files?.[0];if(file)try{const imageSrc=await readImage(file);setEdit((current:any)=>({...current,imageSrc}));}catch(error:any){setError(error.message);}}}/></label>
-                    <div className="product-gallery-editor"><strong>Galeri foto produk</strong><p>Tambahkan hingga 7 foto. Foto utama ditampilkan paling awal. JPG, PNG, WebP.</p><div className="admin-gallery-thumbs">{(edit.gallery || []).map((src:string,index:number)=><div key={index}><img src={src} alt={'Foto tambahan '+(index+1)}/><button type="button" aria-label={'Hapus foto tambahan '+(index+1)} onClick={()=>setEdit((current:any)=>({...current,gallery:current.gallery.filter((_:string,i:number)=>i!==index)}))}>Hapus</button></div>)}</div><input type="file" accept="image/png,image/jpeg,image/webp" multiple disabled={(edit.gallery || []).length>=7} onChange={async e=>{const files=Array.from(e.target.files || []);if(files.length+(edit.gallery || []).length>7){setError('Maksimal 7 foto tambahan.');return;}try{const gallery=await Promise.all(files.map(readImage));setEdit((current:any)=>({...current,gallery:[...(current.gallery || []),...gallery]}));}catch(error:any){setError(error.message);}e.target.value='';}}/></div>
+                    <div className="product-gallery-editor"><strong>Galeri foto produk</strong><p>Tambahkan hingga 7 foto. Foto utama ditampilkan paling awal. JPG, PNG, WebP.</p><div className="admin-gallery-thumbs">{(edit.gallery || []).map((src:string,index:number)=><div key={index}><img src={src} alt={'Foto tambahan '+(index+1)}/><button type="button" aria-label={'Hapus foto tambahan '+(index+1)} onClick={()=>setEdit((current:any)=>({...current,gallery:current.gallery.filter((_:string,i:number)=>i!==index)}))}>Hapus</button></div>)}</div><input type="file" accept="image/png,image/jpeg,image/webp" multiple disabled={(edit.gallery || []).length>=7} onChange={async e=>{const files=Array.from(e.target.files || []);if(files.length+(edit.gallery || []).length>7){setError('Maksimal 7 foto tambahan.');return;}try{const gallery=await Promise.all(files.map((file)=>readImage(file)));setEdit((current:any)=>({...current,gallery:[...(current.gallery || []),...gallery]}));}catch(error:any){setError(error.message);}e.target.value='';}}/></div>
                     {edit.category !== 'Fusion Splicer' && <label><input type="checkbox" name="quote" defaultChecked={edit.quote}/> Harga melalui penawaran sales</label>}
                     <label>Spesifikasi (satu per baris, Nama: Nilai)<textarea name="specsText" rows={6} maxLength={6000} defaultValue={Object.entries(edit.specs || {}).map(([k,v])=>`${k}: ${v}`).join('\n')}/></label>
                     <label>

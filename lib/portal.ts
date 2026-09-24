@@ -3,6 +3,7 @@ import { Buffer } from 'node:buffer';
 import { database as sql } from './database-client';
 import sharp from 'sharp';
 type PhotoPipeline = {
+  metadata(): Promise<{ width?: number; height?: number }>;
   rotate(): PhotoPipeline;
   resize(
     width: number,
@@ -530,13 +531,17 @@ export async function portalRequest(req: Request, path: string[], body: any) {
           throw new BusinessError('Gunakan gambar PNG, JPG, atau WebP maksimal 4 MB.');
         try {
           const buffer = Buffer.from(image.split(',')[1], 'base64');
+          const metadata = await photoProcessor(buffer, { limitInputPixels: 30000000 }).metadata();
+          if (!metadata.width || !metadata.height || Math.abs(metadata.width / metadata.height - width / height) > 0.035)
+            throw new BusinessError(`Rasio gambar harus ${width}:${height}. Gunakan kanvas ${width} × ${height} px.`, 400);
           const result = await photoProcessor(buffer, { limitInputPixels: 30000000 })
             .rotate()
             .resize(width, height, { fit: 'inside', withoutEnlargement: true })
             .webp({ quality: 82 })
             .toBuffer();
           return 'data:image/webp;base64,' + result.toString('base64');
-        } catch {
+        } catch (error) {
+          if (error instanceof BusinessError) throw error;
           throw new BusinessError('Gambar banner tidak dapat diproses.');
         }
       };
