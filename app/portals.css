@@ -838,6 +838,19 @@
   height: 100%;
   object-fit: cover;
 }
+.banner-empty-preview {
+  display: grid;
+  min-height: 104px;
+  place-items: center;
+  padding: 18px;
+  border: 1px dashed #b8c6d8;
+  border-radius: 10px;
+  background: #fff;
+  color: var(--admin-muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
 .banner-admin-preview span {
   position: absolute;
   top: 10px;
@@ -909,6 +922,34 @@
 .banner-upload.mobile-preview img {
   width: min(180px, 100%);
   aspect-ratio: 2 / 1;
+}
+.banner-file-field {
+  display: grid;
+  gap: 7px;
+  color: var(--admin-navy);
+  font-size: 12px;
+  font-weight: 800;
+}
+.banner-file-field input { width: 100%; }
+.banner-remove,
+.banner-undo {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 12px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fff;
+  color: #c62828;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.banner-undo {
+  border-color: #bfd7fb;
+  color: #0757bd;
 }
 .banner-copy-grid label {
   display: grid;

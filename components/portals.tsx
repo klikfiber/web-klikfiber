@@ -18,7 +18,9 @@ import {
   Search,
   ShoppingBag,
   Tag,
+  Trash2,
   TrendingUp,
+  Undo2,
   UsersRound,
 } from 'lucide-react';
 
@@ -72,7 +74,8 @@ function BannerManager({
     try {
       const desktop = key === 'desktopImage';
       const image = await readImage(file, desktop ? 2.5 : 2, desktop ? '1600 × 640 px (rasio 5:2)' : '800 × 400 px (rasio 2:1)');
-      setDraft((current: any) => ({ ...current, [key]: image }));
+      const removeKey = key === 'desktopImage' ? 'removeDesktopImage' : 'removeMobileImage';
+      setDraft((current: any) => ({ ...current, [key]: image, [removeKey]: false }));
     } catch (error: any) {
       setFileError(error.message);
     }
@@ -94,14 +97,14 @@ function BannerManager({
         {banners.map((banner, index) => (
           <article className="banner-admin-card" key={banner.id}>
             <div className="banner-admin-preview">
-              <img src={banner.desktopImage} alt="" />
+              {banner.desktopImage ? <img src={banner.desktopImage} alt="" /> : <div className="banner-empty-preview">Belum ada gambar</div>}
               <span>Banner {index + 1}</span>
             </div>
             <div>
               <strong>Banner {index + 1}</strong>
               <small>{banner.active ? 'Aktif di homepage' : 'Disembunyikan'}</small>
             </div>
-            <button className="btn outline" onClick={() => setDraft({ ...banner })}>
+            <button className="btn outline" onClick={() => setDraft({ ...banner, removeDesktopImage: false, removeMobileImage: false })}>
               Edit banner
             </button>
           </article>
@@ -118,16 +121,26 @@ function BannerManager({
             if(await onSave(draft)) setDraft(null);
           }}>
             <div className="banner-upload-grid">
-              <label className="banner-upload">
+              <div className="banner-upload">
                 <span><strong>Versi desktop — ukuran wajib</strong><small>1600 × 640 px · rasio 5:2 · area aman 80 px dari tepi</small></span>
-                <img src={draft.desktopImage} alt="Pratinjau banner desktop" />
-                <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void pick('desktopImage', event.target.files?.[0])} />
-              </label>
-              <label className="banner-upload mobile-preview">
+                {draft.desktopImage && !draft.removeDesktopImage ? <img src={draft.desktopImage} alt="Pratinjau banner desktop" /> : <div className="banner-empty-preview">Gambar desktop akan dihapus setelah disimpan.</div>}
+                <label className="banner-file-field">Ganti gambar desktop<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void pick('desktopImage', event.target.files?.[0])} /></label>
+                {draft.desktopImage && !draft.removeDesktopImage ? (
+                  <button className="banner-remove" type="button" onClick={() => setDraft({ ...draft, removeDesktopImage: true })}><Trash2 size={16} /> Hapus gambar desktop</button>
+                ) : draft.removeDesktopImage ? (
+                  <button className="banner-undo" type="button" onClick={() => setDraft({ ...draft, removeDesktopImage: false })}><Undo2 size={16} /> Batalkan penghapusan</button>
+                ) : null}
+              </div>
+              <div className="banner-upload mobile-preview">
                 <span><strong>Versi mobile — ukuran wajib</strong><small>800 × 400 px · rasio 2:1 · informasi utama di tengah</small></span>
-                <img src={draft.mobileImage} alt="Pratinjau banner mobile" />
-                <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void pick('mobileImage', event.target.files?.[0])} />
-              </label>
+                {draft.mobileImage && !draft.removeMobileImage ? <img src={draft.mobileImage} alt="Pratinjau banner mobile" /> : <div className="banner-empty-preview">Gambar mobile akan dihapus setelah disimpan.</div>}
+                <label className="banner-file-field">Ganti gambar mobile<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void pick('mobileImage', event.target.files?.[0])} /></label>
+                {draft.mobileImage && !draft.removeMobileImage ? (
+                  <button className="banner-remove" type="button" onClick={() => setDraft({ ...draft, removeMobileImage: true })}><Trash2 size={16} /> Hapus gambar mobile</button>
+                ) : draft.removeMobileImage ? (
+                  <button className="banner-undo" type="button" onClick={() => setDraft({ ...draft, removeMobileImage: false })}><Undo2 size={16} /> Batalkan penghapusan</button>
+                ) : null}
+              </div>
             </div>
             {fileError && <p className="error" role="alert">{fileError}</p>}
             <div className="banner-copy-grid">

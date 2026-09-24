@@ -545,11 +545,12 @@ export async function portalRequest(req: Request, path: string[], body: any) {
           throw new BusinessError('Gambar banner tidak dapat diproses.');
         }
       };
-      const desktopImage = await processImage(body.desktopImage, 1600, 640, existing[0].desktop_image);
-      const mobileImage = await processImage(body.mobileImage, 800, 400, existing[0].mobile_image);
+      const desktopImage = body.removeDesktopImage === true ? '' : await processImage(body.desktopImage, 1600, 640, existing[0].desktop_image);
+      const mobileImage = body.removeMobileImage === true ? '' : await processImage(body.mobileImage, 800, 400, existing[0].mobile_image);
       const href = text(body.href, 1, 200);
       if (!/^\/(?!\/)/.test(href) && !/^https:\/\//.test(href)) throw new BusinessError('Gunakan tautan halaman website atau URL HTTPS.');
-      await sql`UPDATE portal_banners SET href=${href},desktop_image=${desktopImage},mobile_image=${mobileImage},active=${body.active === true} WHERE id=${bannerId}`;
+      const active = body.active === true && !!desktopImage && !!mobileImage;
+      await sql`UPDATE portal_banners SET href=${href},desktop_image=${desktopImage},mobile_image=${mobileImage},active=${active} WHERE id=${bannerId}`;
       return { ok: true };
     }
     if (action === 'admin/activity' && !post) {
